@@ -25,7 +25,7 @@ export interface ItemDraft extends Macros {
 }
 export interface MealItem extends Base, ItemDraft { meal_id: string; sort: number }
 export interface MealPhoto extends Base { meal_id: string; storage_path: string }
-export interface Reminder extends Base { kind: 'hydration' | 'meal' | 'review'; slot: Slot | null; label: string; time: string; enabled: boolean; sort: number }
+export interface Reminder extends Base { kind: 'hydration' | 'meal' | 'review' | 'weight'; slot: Slot | null; label: string; time: string; enabled: boolean; sort: number; weekday: number | null }
 export interface ReminderEvent extends Base {
   reminder_id: string; local_date: string; status: 'sent' | 'completed' | 'skipped' | 'snoozed'; snoozed_until: string | null; pushed_at: string | null
 }
@@ -47,6 +47,12 @@ export interface AiItem {
 }
 export interface AiQuestion { question: string; kind: 'oil' | 'sauce' | 'other' }
 export interface AiAnalysis { meal_name: string; items: AiItem[]; questions: AiQuestion[]; assumptions: string; overall_confidence: number; analysed_at: string }
+export interface LabelAnalysis {
+  product_name: string; brand: string | null; unit: Unit; printed_basis: 'per_100' | 'per_serving' | 'both'
+  kcal: number; protein_g: number; carbs_g: number; fat_g: number; fibre_g: number; sugar_g: number | null
+  serving_label: string | null; serving_grams: number | null
+  confidence: number; notes: string; verdict: string
+}
 export interface DailyAi {
   headline: string; calorie_target: string; protein: string; carb_fat_balance: string; strongest_meal: string; meal_to_improve: string
   schedule: string; missed_meals: string; oil_and_extras: string; adjustments: string; improve_tomorrow: string; action_plan: string[]

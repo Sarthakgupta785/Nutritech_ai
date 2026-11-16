@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js'
 import { configured, supabase } from './lib/supabase'
 import { clearLocal, patch, setUid, sync } from './lib/db'
 import { deviceTz } from './lib/dates'
+import { ensureWeighInReminder } from './lib/actions'
 import { refreshSubscription } from './lib/push'
 import { useProfile, usePrefs } from './lib/hooks'
 import { Icon, Spinner, cx } from './components/ui'
@@ -53,7 +54,7 @@ function Shell() {
   const nav = useNavigate()
   const [ready, setReady] = useState(false)
 
-  useEffect(() => { void sync().finally(() => setReady(true)); void refreshSubscription() }, [])
+  useEffect(() => { void sync().finally(() => { setReady(true); void ensureWeighInReminder() }); void refreshSubscription() }, [])
   // Notification taps arrive from the service worker while the app is already open.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return

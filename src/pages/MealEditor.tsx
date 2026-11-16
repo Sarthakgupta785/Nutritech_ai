@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import FoodSearch from '../components/FoodSearch'
+import LabelScanner from '../components/LabelScanner'
 import { confirmMeal, deleteMeal, draftsFromAnalysis, itemToDraft, SLOT_LABEL, SLOTS } from '../lib/actions'
 import { api } from '../lib/api'
 import { alive, db, loadPhoto, patch, savePhoto } from '../lib/db'
@@ -34,6 +35,7 @@ export default function MealEditor() {
   const [name, setName] = useState(''), [slot, setSlot] = useState<Slot>('other'), [eatenAt, setEatenAt] = useState('')
   const [analysing, setAnalysing] = useState(false), [err, setErr] = useState('')
   const [search, setSearch] = useState(params.get('add') === '1')
+  const [scan, setScan] = useState(params.get('scan') === '1')
   const [dismissed, setDismissed] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const started = useRef(false)
@@ -154,7 +156,8 @@ export default function MealEditor() {
 
       <div className="mt-3 flex gap-2">
         <Button variant="soft" className="flex-1" onClick={() => setSearch(true)}><Icon name="plus" size={18} />Add food</Button>
-        <Button variant="soft" className="flex-1" onClick={() => addItems([draftFromFood(FOOD_BY_ID.oil, 4.5)])}><Icon name="drop" size={18} />Add oil</Button>
+        <Button variant="soft" className="flex-1" onClick={() => setScan(true)}><Icon name="camera" size={18} />Scan label</Button>
+        <Button variant="soft" onClick={() => addItems([draftFromFood(FOOD_BY_ID.oil, 4.5)])}><Icon name="drop" size={18} />Oil</Button>
       </div>
 
       {avoided.length > 0 && <div className="mt-3"><Note>Heads-up: this meal includes {[...new Set(avoided)].join(', ')}, which is on your avoid list. Log it as it was; this is just so you know.</Note></div>}
@@ -172,7 +175,8 @@ export default function MealEditor() {
           </Button>
         </div>
       </div>
-      <FoodSearch open={search} onClose={() => setSearch(false)} onAdd={addItems} />
+      <FoodSearch open={search} onClose={() => setSearch(false)} onAdd={addItems} onScanLabel={() => setScan(true)} />
+      <LabelScanner open={scan} onClose={() => setScan(false)} onAdd={addItems} />
     </Page>
   )
 }

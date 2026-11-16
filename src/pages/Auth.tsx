@@ -7,6 +7,12 @@ export default function Auth() {
   const [email, setEmail] = useState(''), [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
 
+  async function google() {
+    setBusy(true); setMsg(null)
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+    if (error) { setMsg({ tone: 'danger', text: error.message }); setBusy(false) }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setMsg(null)
     try {
@@ -25,6 +31,10 @@ export default function Auth() {
       <img src="/icons/icon-192.png" alt="" className="mb-6 h-20 w-20 rounded-[22px] shadow-card" />
       <h1 className="text-[34px] font-bold leading-10 tracking-tight">NutriTrack AI</h1>
       <p className="mb-8 mt-1 text-ink-500">Your personal nutrition and fat-loss assistant.</p>
+      <Button variant="outline" block size="lg" disabled={busy} onClick={google}>Continue with Google</Button>
+      <div className="my-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-ink-400">
+        <span className="h-px flex-1 bg-ink-200" />or<span className="h-px flex-1 bg-ink-200" />
+      </div>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Email"><Input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></Field>
         <Field label="Password" hint={mode === 'up' ? 'At least 8 characters' : undefined}><Input type="password" autoComplete={mode === 'up' ? 'new-password' : 'current-password'} required minLength={8} value={password} onChange={e => setPassword(e.target.value)} /></Field>

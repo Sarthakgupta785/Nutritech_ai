@@ -9,14 +9,24 @@ export const SLOT_LABEL: Record<Slot, string> = { breakfast: 'Breakfast', mid_mo
 export const SLOTS: Slot[] = ['breakfast', 'mid_morning', 'lunch', 'evening_snack', 'dinner', 'other']
 
 export const DEFAULT_REMINDERS: Omit<Reminder, 'id' | 'user_id' | 'updated_at'>[] = [
-  { kind: 'hydration', slot: null, label: 'Morning hydration', time: '08:00', enabled: true, sort: 0 },
-  { kind: 'meal', slot: 'breakfast', label: 'Breakfast', time: '09:00', enabled: true, sort: 1 },
-  { kind: 'meal', slot: 'mid_morning', label: 'Mid-morning snack', time: '11:30', enabled: true, sort: 2 },
-  { kind: 'meal', slot: 'lunch', label: 'Lunch', time: '13:30', enabled: true, sort: 3 },
-  { kind: 'meal', slot: 'evening_snack', label: 'Evening snack', time: '16:30', enabled: true, sort: 4 },
-  { kind: 'meal', slot: 'dinner', label: 'Dinner', time: '19:30', enabled: true, sort: 5 },
-  { kind: 'review', slot: null, label: 'Daily nutrition review', time: '21:30', enabled: true, sort: 6 },
+  { kind: 'hydration', slot: null, label: 'Morning hydration', time: '08:00', enabled: true, sort: 0, weekday: null },
+  { kind: 'meal', slot: 'breakfast', label: 'Breakfast', time: '09:00', enabled: true, sort: 1, weekday: null },
+  { kind: 'meal', slot: 'mid_morning', label: 'Mid-morning snack', time: '11:30', enabled: true, sort: 2, weekday: null },
+  { kind: 'meal', slot: 'lunch', label: 'Lunch', time: '13:30', enabled: true, sort: 3, weekday: null },
+  { kind: 'meal', slot: 'evening_snack', label: 'Evening snack', time: '16:30', enabled: true, sort: 4, weekday: null },
+  { kind: 'meal', slot: 'dinner', label: 'Dinner', time: '19:30', enabled: true, sort: 5, weekday: null },
+  { kind: 'review', slot: null, label: 'Daily nutrition review', time: '21:30', enabled: true, sort: 6, weekday: null },
+  { kind: 'weight', slot: null, label: 'Weekly weigh-in', time: '07:30', enabled: true, sort: 7, weekday: 6 },
 ]
+export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+/** Adds the weekly weigh-in reminder for accounts created before that reminder existed. */
+export async function ensureWeighInReminder() {
+  const rs = alive(await db.reminders.toArray())
+  if (!rs.length || rs.some(r => r.kind === 'weight')) return
+  const d = DEFAULT_REMINDERS.find(r => r.kind === 'weight')!
+  await put('reminders', { ...d, id: newId(), sort: rs.length })
+}
 
 /** Best-guess meal slot for "now" from the reminder schedule. */
 export function guessSlot(reminders: Reminder[], hhmm: string): Slot {

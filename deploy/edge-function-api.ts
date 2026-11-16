@@ -418,6 +418,51 @@ Analyse this meal photo.` }
   });
   return { ...out, analysed_at: (/* @__PURE__ */ new Date()).toISOString() };
 }
+var LABEL_TOOL = {
+  name: "nutrition_label",
+  description: "Values read from a packaged food nutrition label",
+  input_schema: {
+    type: "object",
+    required: ["product_name", "brand", "unit", "printed_basis", "kcal", "protein_g", "carbs_g", "fat_g", "fibre_g", "sugar_g", "serving_label", "serving_grams", "confidence", "notes", "verdict"],
+    properties: {
+      product_name: { ...str2, description: "Product name as printed, without the brand" },
+      brand: { type: ["string", "null"] },
+      unit: { type: "string", enum: ["g", "ml"], description: "ml only for drinks measured by volume" },
+      printed_basis: { type: "string", enum: ["per_100", "per_serving", "both"], description: "What the label actually printed" },
+      kcal: { ...num, description: "Energy per 100 g (or 100 ml). Convert if the label only gave per-serving. If only kJ is printed, divide by 4.184." },
+      protein_g: { ...num, description: "Protein per 100 g/ml" },
+      carbs_g: { ...num, description: "Total carbohydrate per 100 g/ml" },
+      fat_g: { ...num, description: "Total fat per 100 g/ml" },
+      fibre_g: { ...num, description: "Dietary fibre per 100 g/ml, 0 if not printed" },
+      sugar_g: { type: ["number", "null"], description: "Of which sugars, per 100 g/ml; null if not printed" },
+      serving_label: { type: ["string", "null"], description: 'Serving as described on the pack, e.g. "1 packet" or "2 biscuits"' },
+      serving_grams: { type: ["number", "null"], description: "That serving in grams/ml; null if the label does not say" },
+      confidence: { ...num, description: "0-1. Lower it when the label is blurred, partly cut off, or the basis was ambiguous." },
+      notes: { ...str2, description: "One short line: any conversion you performed, anything unreadable, or anything the user should check" },
+      verdict: { ...str2, description: "One or two sentences on how this fits the user's remaining targets today and their fat-loss goal. Concrete and non-judgmental: name the cost in calories and what it gives back in protein or fibre. If it fits fine, say so plainly. Suggest a swap only when there is an obviously better one among foods they already eat." }
+    }
+  }
+};
+async function analyzeLabel(b, ctx) {
+  if (!b.image) throw new Error("No image supplied");
+  const t = ctx.targets, d = ctx.today;
+  const remaining = t ? `Remaining today: ${Math.round(t.kcal - d.kcal)} kcal of ${t.kcal}, ${Math.round(t.protein_g - d.protein_g)} g protein of ${t.protein_g}.` : "Targets unknown.";
+  return await ai({
+    system: `You read nutrition labels from photographs of packaged food for a food diary. Be literal and careful.
+- Report every value per 100 g (or per 100 ml for drinks). Many labels, especially Indian ones, print only a per-serving column: in that case divide by the serving size and say so in notes.
+- If energy is given only in kJ, convert to kcal by dividing by 4.184.
+- Never guess a number that is not legible. Use 0 only when the label genuinely prints 0; if a value is unreadable or absent, use 0 and say which one in notes so the user can fill it in.
+- Do not confuse "per serve" with "per 100 g" columns, and do not mix values from the two.
+- If the photo is not a nutrition label at all, set confidence to 0 and explain in notes.
+User context for the verdict only, never let it change the numbers you read: ${remaining} Goal: ${ctx.profile?.goal ?? "fat loss"}. Foods they avoid: ${(ctx.preferences?.avoid_foods ?? []).join(", ") || "none"}.`,
+    messages: [{ role: "user", content: [
+      { type: "image", source: { type: "base64", media_type: b.media_type || "image/jpeg", data: b.image } },
+      { type: "text", text: "Read this nutrition label." }
+    ] }],
+    tool: LABEL_TOOL,
+    max_tokens: 1200
+  });
+}
 async function foodSearch(q) {
   const key = Deno.env.get("FDC_API_KEY") || "DEMO_KEY";
   const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${key}&pageSize=20&dataType=${encodeURIComponent("Foundation,SR Legacy")}&query=${encodeURIComponent(q)}`;
@@ -459,6 +504,8 @@ Deno.serve(async (req) => {
     switch (b.action) {
       case "analyze_meal":
         return json({ analysis: await analyzeMeal(b) });
+      case "analyze_label":
+        return json({ label: await analyzeLabel(b, await loadContext(sb, user.id, date, 1)) });
       case "food_search":
         return json({ foods: await foodSearch(String(b.q || "").slice(0, 80)) });
       case "daily_report":

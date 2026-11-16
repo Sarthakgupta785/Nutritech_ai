@@ -27,11 +27,12 @@ Built end to end from a written specification — see [How this was built](#how-
 - Photograph a meal; a vision model identifies each food, estimates portions, and flags what it could not judge
 - Every estimate is editable before it counts — quantities, nutrition, cooking method, missing items
 - Asks about hidden cooking oil, dressings and sauces when they would materially change the numbers
+- Scan the nutrition panel on packaged food: values are read, normalised to per 100 g, and saved as a reusable food
 - Manual logging from an 86-item reference database (Indian and common household foods) with live USDA lookup
 - Water, daily weight, favourites, meal duplication, and a photo journal of every day
 
 **Guidance**
-- Seven daily push reminders (hydration, four meals, nightly review), each snoozable or skippable
+- Daily push reminders (hydration, meals, nightly review) plus a weekly weigh-in, each snoozable or skippable
 - An AI coach that answers from your actual targets, preferences and food log rather than generic advice
 - A nightly report: ten specific questions answered, plus three concrete actions for tomorrow
 - Weekly analytics — trends, meal consistency, reminder completion, and a 7-day weight average
@@ -203,6 +204,7 @@ Supabase → **SQL Editor**, run in order:
 
 1. [`supabase/migrations/0001_schema.sql`](supabase/migrations/0001_schema.sql) — tables, RLS, private photo bucket
 2. [`supabase/migrations/0002_seed_foods.sql`](supabase/migrations/0002_seed_foods.sql) — reference foods
+3. [`supabase/migrations/0004_weigh_in_reminders.sql`](supabase/migrations/0004_weigh_in_reminders.sql) — weekly weigh-in reminders
 
 Then **Database → Extensions**: enable `pg_cron` and `pg_net`.
 
@@ -250,7 +252,13 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_...
 VITE_VAPID_PUBLIC_KEY=...
 ```
 
-### 6. Install on iPhone
+### 6. Sign-in methods
+
+Email and password work out of the box. For **Continue with Google**, create an OAuth client in Google
+Cloud Console with the redirect URI `https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback`, then paste
+its client ID and secret into **Authentication → Sign In / Providers → Google** in Supabase.
+
+### 7. Install on iPhone
 
 Open the address in **Safari** → **Share** → **Add to Home Screen**. Open it from the new icon —
 push notifications only work from the installed app — then **Profile → Notifications → Enable**.

@@ -16,6 +16,11 @@ export function localMinutes(d: Date, tz: string): number {
   const g = (t: string) => Number(parts.find(p => p.type === t)?.value ?? 0)
   return g('hour') * 60 + g('minute')
 }
+/** 0 = Monday .. 6 = Sunday, in the given timezone. */
+export function weekdayIndex(d: Date, tz: string): number {
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(d)
+  return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(name)
+}
 export function localWeekday(d: Date, tz: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(d)
 }

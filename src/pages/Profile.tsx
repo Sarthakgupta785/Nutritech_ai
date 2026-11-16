@@ -7,7 +7,7 @@ import { useProfile, usePrefs, useReminders, useSyncState, useTargets } from '..
 import { ACTIVITY } from '../lib/nutrition'
 import { disablePush, enablePush, isIOS, pushStatus, type PushStatus } from '../lib/push'
 import { supabase } from '../lib/supabase'
-import { SLOT_LABEL, SLOTS } from '../lib/actions'
+import { SLOT_LABEL, SLOTS, WEEKDAYS } from '../lib/actions'
 import type { Profile as P, Reminder, Slot } from '../lib/types'
 import { Button, Card, Field, Icon, Input, Note, NumInput, Page, SectionTitle, Segmented, Sheet, Toggle, inputCls } from '../components/ui'
 
@@ -42,12 +42,12 @@ export default function Profile() {
         {reminders.map(r => (
           <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
             <input aria-label={`${r.label} time`} type="time" value={r.time} onChange={e => e.target.value && patch('reminders', r.id, { time: e.target.value })} className="num h-10 w-[104px] rounded-xl bg-ink-50 px-2 font-semibold outline-none" />
-            <button className="min-w-0 flex-1 truncate text-left font-medium" onClick={() => { setEditing(r); setSheet('reminder') }}>{r.label}</button>
+            <button className="min-w-0 flex-1 truncate text-left font-medium" onClick={() => { setEditing(r); setSheet('reminder') }}>{r.label}{r.weekday != null && <span className="ml-1.5 text-[12px] font-normal text-ink-400">{WEEKDAYS[r.weekday].slice(0, 3)} only</span>}</button>
             <Toggle on={r.enabled} onChange={v => patch('reminders', r.id, { enabled: v })} label={`Enable ${r.label}`} />
           </div>
         ))}
       </div>
-      <p className="mt-2 px-1 text-xs text-ink-400">Reminders repeat every day at these times, in your phone's current timezone.</p>
+      <p className="mt-2 px-1 text-xs text-ink-400">Reminders repeat every day at these times, in your phone's current timezone. Weigh-in reminders repeat weekly. Add as many water reminders as you like.</p>
 
       <SectionTitle>Notifications</SectionTitle>
       <Notifications />
@@ -112,16 +112,19 @@ function PrefsForm({ onDone }: { onDone: () => void }) {
 function ReminderForm({ r, count, onDone }: { r: Reminder | null; count: number; onDone: () => void }) {
   const [label, setLabel] = useState(r?.label ?? ''), [time, setTime] = useState(r?.time ?? '15:00')
   const [kind, setKind] = useState<Reminder['kind']>(r?.kind ?? 'hydration'), [slot, setSlot] = useState<Slot>((r?.slot as Slot) ?? 'other')
+  const [weekday, setWeekday] = useState<number>(r?.weekday ?? 6)
   async function save() {
-    const base = { label: label.trim() || (kind === 'hydration' ? 'Hydration' : SLOT_LABEL[slot]), time, kind, slot: kind === 'meal' ? slot : null }
+    const fallback = kind === 'hydration' ? 'Hydration' : kind === 'weight' ? 'Weekly weigh-in' : SLOT_LABEL[slot]
+    const base = { label: label.trim() || fallback, time, kind, slot: kind === 'meal' ? slot : null, weekday: kind === 'weight' ? weekday : null }
     if (r) await patch('reminders', r.id, base); else await put('reminders', { id: newId(), ...base, enabled: true, sort: count })
     onDone()
   }
   return (
     <div className="space-y-3">
-      {(!r || r.kind !== 'review') && <Field label="Type"><Segmented value={kind === 'review' ? 'hydration' : kind} onChange={k => setKind(k)} options={[{ value: 'hydration', label: 'Hydration' }, { value: 'meal', label: 'Meal' }]} /></Field>}
+      {(!r || r.kind !== 'review') && <Field label="Type"><Segmented value={kind === 'review' ? 'hydration' : kind} onChange={k => setKind(k)} options={[{ value: 'hydration', label: 'Water' }, { value: 'meal', label: 'Meal' }, { value: 'weight', label: 'Weigh-in' }]} /></Field>}
+      {kind === 'weight' && <Field label="Day" hint="Weigh-in reminders repeat weekly; all others repeat daily."><select className={inputCls} value={weekday} onChange={e => setWeekday(Number(e.target.value))}>{WEEKDAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></Field>}
       {kind === 'meal' && <Field label="Meal"><select className={inputCls} value={slot} onChange={e => setSlot(e.target.value as Slot)}>{SLOTS.map(s => <option key={s} value={s}>{SLOT_LABEL[s]}</option>)}</select></Field>}
-      <Field label="Label"><Input value={label} onChange={e => setLabel(e.target.value)} placeholder={kind === 'hydration' ? 'Afternoon water' : SLOT_LABEL[slot]} /></Field>
+      <Field label="Label"><Input value={label} onChange={e => setLabel(e.target.value)} placeholder={kind === 'hydration' ? 'Afternoon water' : kind === 'weight' ? 'Weekly weigh-in' : SLOT_LABEL[slot]} /></Field>
       <Field label="Time"><input type="time" className={inputCls} value={time} onChange={e => setTime(e.target.value)} /></Field>
       <Button block size="lg" onClick={save}>Save</Button>
       {r && r.kind !== 'review' && <Button variant="danger" block onClick={async () => { await remove('reminders', r.id); onDone() }}>Delete reminder</Button>}

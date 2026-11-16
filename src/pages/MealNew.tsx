@@ -24,9 +24,9 @@ export default function MealNew() {
       nav(`/meal/${id}/edit?analyse=1`, { replace: true })
     } catch (e: any) { setErr(e?.message ?? 'Could not read that image'); setBusy(false) }
   }
-  async function withoutPhoto() {
+  async function withoutPhoto(mode: 'add' | 'scan' = 'add') {
     const id = await createDraftMeal({ slot, date, noPhoto: true })
-    nav(`/meal/${id}/edit?add=1`, { replace: true })
+    nav(`/meal/${id}/edit?${mode}=1`, { replace: true })
   }
   const Option = ({ icon, title, sub, onClick, quiet }: { icon: string; title: string; sub: string; onClick: () => void; quiet?: boolean }) => (
     <button onClick={onClick} disabled={busy} className={`flex w-full items-center gap-4 rounded-3xl p-5 text-left shadow-card active:scale-[.99] ${quiet ? 'bg-white' : 'bg-leaf-600 text-white'}`}>
@@ -42,7 +42,8 @@ export default function MealNew() {
       <div className="space-y-3">
         <Option icon="camera" title="Take Photo" sub="AI identifies the food and estimates portions" onClick={() => camera.current?.click()} />
         <Option icon="image" title="Upload from Gallery" sub="Choose a photo you already took" onClick={() => gallery.current?.click()} quiet />
-        <Option icon="edit" title="Log Without Photo" sub="Only if you can't take one. Enter foods by hand." onClick={withoutPhoto} quiet />
+        <Option icon="search" title="Scan Nutrition Label" sub="For packaged food — reads the table on the back" onClick={() => withoutPhoto('scan')} quiet />
+        <Option icon="edit" title="Log Without Photo" sub="Only if you can't take one. Enter foods by hand." onClick={() => withoutPhoto('add')} quiet />
       </div>
       {busy && <div className="mt-6 flex items-center justify-center gap-3 text-ink-500"><Spinner />Preparing photo…</div>}
       {err && <div className="mt-4"><Note tone="danger">{err}</Note></div>}

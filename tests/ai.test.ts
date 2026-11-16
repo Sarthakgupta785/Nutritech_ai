@@ -24,3 +24,14 @@ describe('Gemini adapter', () => {
     expect(() => parseJson('nope')).toThrow()
   })
 })
+
+describe('scheduler helpers', () => {
+  it('weekdayIndex is Monday-based and timezone aware', async () => {
+    const { weekdayIndex } = await import('../supabase/functions/_shared/util.ts')
+    expect(weekdayIndex(new Date('2026-11-16T12:00:00Z'), 'Asia/Kolkata')).toBe(0) // a Monday
+    expect(weekdayIndex(new Date('2026-11-22T12:00:00Z'), 'Asia/Kolkata')).toBe(6) // the Sunday
+    // 20:00 UTC Sunday is already Monday in Kolkata
+    expect(weekdayIndex(new Date('2026-11-22T20:00:00Z'), 'Asia/Kolkata')).toBe(0)
+    expect(weekdayIndex(new Date('2026-11-22T20:00:00Z'), 'America/New_York')).toBe(6)
+  })
+})

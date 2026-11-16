@@ -4,7 +4,7 @@
 // Deploy with:  supabase functions deploy tick --no-verify-jwt   (it is protected by CRON_SECRET instead)
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { generateDaily, generateWeekly } from '../_shared/reports.ts'
-import { json, localDate, localMinutes, localWeekday, stableId, weekStart } from '../_shared/util.ts'
+import { json, localDate, localMinutes, localWeekday, stableId, weekdayIndex, weekStart } from '../_shared/util.ts'
 import { sendPush, vapidFromEnv } from '../_shared/webpush.ts'
 
 // Supabase provides legacy SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY and, on newer projects,
@@ -19,13 +19,22 @@ const SERVICE_KEY = () => envKey('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_K
 const WINDOW_MIN = 20 // a reminder is still delivered if the scheduler was late by up to this many minutes
 
 const COPY: Record<string, { title: string; body: string }> = {
-  hydration: { title: 'Morning hydration 💧', body: 'Start the day with a glass of water.' },
+  hydration: { title: 'Hydration 💧', body: 'Time for a glass of water.' },
   breakfast: { title: 'Breakfast time 🍳', body: 'Take a photo of your breakfast to log it.' },
   mid_morning: { title: 'Mid-morning snack 🍎', body: 'Time for your snack. Snap a photo to log it.' },
   lunch: { title: 'Lunch time 🍛', body: 'Take a photo of your lunch to log it.' },
   evening_snack: { title: 'Evening snack 🥜', body: 'Time for your snack. Snap a photo to log it.' },
   dinner: { title: 'Dinner time 🍽️', body: 'Take a photo of your dinner to log it.' },
   review: { title: 'Your daily report is ready 📊', body: 'See how today went and get three ideas for tomorrow.' },
+}
+
+/** A reminder's push text. Hydration and weight use the user's own label, so extra ones added
+ *  through the day don't all announce themselves as the morning reminder. */
+function copyFor(r: { kind: string; slot: string | null; label: string }): { title: string; body: string } {
+  if (r.kind === 'meal') return COPY[r.slot ?? ''] ?? { title: r.label, body: 'Tap to log this meal.' }
+  if (r.kind === 'hydration') return { title: `${r.label} 💧`, body: COPY.hydration.body }
+  if (r.kind === 'weight') return { title: `${r.label} ⚖️`, body: 'Log your weight so the weekly trend stays accurate.' }
+  return COPY[r.kind] ?? { title: r.label, body: 'Tap to open NutriTrack.' }
 }
 
 Deno.serve(async req => {
@@ -62,6 +71,7 @@ Deno.serve(async req => {
       const [h, m] = String(r.time).split(':').map(Number)
       const late = localMinutes(now, tz) - (h * 60 + m)
       if (late < 0 || late > WINDOW_MIN) continue
+      if (r.weekday !== null && r.weekday !== undefined && r.weekday !== weekdayIndex(now, tz)) continue
       const date = localDate(now, tz)
       const id = await stableId(`rev:${r.id}:${date}`)
       const { data: ev } = await sb.from('reminder_events').select('*').eq('id', id).maybeSingle()
@@ -74,7 +84,7 @@ Deno.serve(async req => {
       const { error } = await sb.from('reminder_events').upsert({ id, user_id: r.user_id, reminder_id: r.id, local_date: date, status: 'sent', pushed_at: now.toISOString() })
       if (error) { stats.errors.push(error.message); continue }
 
-      const copy = COPY[r.kind === 'meal' ? r.slot : r.kind] ?? { title: r.label, body: 'Tap to open NutriTrack.' }
+      const copy = copyFor(r)
       let url = `/remind/${r.id}/${date}`
       if (r.kind === 'review') {
         try {
@@ -83,7 +93,7 @@ Deno.serve(async req => {
         } catch (e) { stats.errors.push(`report: ${e}`) }
         url = `/report/${date}`
       }
-      await push(r.user_id, { title: r.kind === 'meal' || COPY[r.kind] ? copy.title : r.label, body: copy.body, url, tag: `r-${r.id}`,
+      await push(r.user_id, { title: copy.title, body: copy.body, url, tag: `r-${r.id}`,
         actions: r.kind === 'meal' ? [{ action: 'snooze10', title: 'Snooze 10 min' }, { action: 'snooze15', title: 'Snooze 15 min' }] : [] })
     }
 
@@ -92,7 +102,7 @@ Deno.serve(async req => {
     for (const ev of snoozed ?? []) {
       const r = (ev as any).reminders; if (!r) continue
       await sb.from('reminder_events').update({ status: 'sent', snoozed_until: null, pushed_at: now.toISOString() }).eq('id', ev.id)
-      const copy = COPY[r.kind === 'meal' ? r.slot : r.kind] ?? { title: r.label, body: '' }
+      const copy = copyFor(r)
       await push(ev.user_id, { title: copy.title, body: `Snoozed reminder. ${copy.body}`, url: `/remind/${r.id}/${ev.local_date}`, tag: `r-${r.id}`,
         actions: [{ action: 'snooze10', title: 'Snooze 10 min' }, { action: 'snooze15', title: 'Snooze 15 min' }] })
       stats.snoozed++

@@ -11,7 +11,7 @@ type Tab = 'all' | 'recent' | 'meals' | 'custom'
 interface Hit { key: string; name: string; unit: Unit; source: Source; kcal: number; protein_g: number; carbs_g: number; fat_g: number; fibre_g: number; servings?: [string, number][]; id?: string; keys?: string; cat?: string }
 
 /** Searchable food picker: built-in reference foods, recent items, favourite meals, custom foods and live USDA lookup. */
-export default function FoodSearch({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (items: ItemDraft[]) => void }) {
+export default function FoodSearch({ open, onClose, onAdd, onScanLabel }: { open: boolean; onClose: () => void; onAdd: (items: ItemDraft[]) => void; onScanLabel?: () => void }) {
   const prefs = usePrefs()
   const [tab, setTab] = useState<Tab>('all'), [q, setQ] = useState('')
   const [usda, setUsda] = useState<Hit[] | null>(null), [busy, setBusy] = useState(false), [err, setErr] = useState('')
@@ -85,7 +85,10 @@ export default function FoodSearch({ open, onClose, onAdd }: { open: boolean; on
           {err && <div className="mt-2"><Note tone="danger">{err}</Note></div>}
         </div>
       )}
-      <Button variant="soft" block className="mt-3" onClick={() => setCreating(true)}><Icon name="plus" size={16} />Create custom food</Button>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {onScanLabel && <Button variant="soft" onClick={() => { onClose(); onScanLabel() }}><Icon name="camera" size={16} />Scan label</Button>}
+        <Button variant="soft" className={onScanLabel ? '' : 'col-span-2'} onClick={() => setCreating(true)}><Icon name="plus" size={16} />Custom food</Button>
+      </div>
       <CustomFood open={creating} initialName={q} onClose={() => setCreating(false)} onCreated={d => { onAdd([d]); onClose() }} />
     </Sheet>
   )

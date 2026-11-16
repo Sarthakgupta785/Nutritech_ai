@@ -111,6 +111,10 @@ function localMinutes(d, tz) {
   const g = (t) => Number(parts.find((p) => p.type === t)?.value ?? 0);
   return g("hour") * 60 + g("minute");
 }
+function weekdayIndex(d, tz) {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(d);
+  return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(name);
+}
 function localWeekday(d, tz) {
   return new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(d);
 }
@@ -373,7 +377,7 @@ function envKey(...names) {
 var SERVICE_KEY = () => envKey("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS");
 var WINDOW_MIN = 20;
 var COPY = {
-  hydration: { title: "Morning hydration \u{1F4A7}", body: "Start the day with a glass of water." },
+  hydration: { title: "Hydration \u{1F4A7}", body: "Time for a glass of water." },
   breakfast: { title: "Breakfast time \u{1F373}", body: "Take a photo of your breakfast to log it." },
   mid_morning: { title: "Mid-morning snack \u{1F34E}", body: "Time for your snack. Snap a photo to log it." },
   lunch: { title: "Lunch time \u{1F35B}", body: "Take a photo of your lunch to log it." },
@@ -381,6 +385,12 @@ var COPY = {
   dinner: { title: "Dinner time \u{1F37D}\uFE0F", body: "Take a photo of your dinner to log it." },
   review: { title: "Your daily report is ready \u{1F4CA}", body: "See how today went and get three ideas for tomorrow." }
 };
+function copyFor(r) {
+  if (r.kind === "meal") return COPY[r.slot ?? ""] ?? { title: r.label, body: "Tap to log this meal." };
+  if (r.kind === "hydration") return { title: `${r.label} \u{1F4A7}`, body: COPY.hydration.body };
+  if (r.kind === "weight") return { title: `${r.label} \u2696\uFE0F`, body: "Log your weight so the weekly trend stays accurate." };
+  return COPY[r.kind] ?? { title: r.label, body: "Tap to open NutriTrack." };
+}
 Deno.serve(async (req) => {
   const secret = Deno.env.get("CRON_SECRET");
   if (!secret || req.headers.get("x-cron-secret") !== secret) return json({ error: "forbidden" }, 403);
@@ -419,6 +429,7 @@ Deno.serve(async (req) => {
       const [h, m] = String(r.time).split(":").map(Number);
       const late = localMinutes(now, tz) - (h * 60 + m);
       if (late < 0 || late > WINDOW_MIN) continue;
+      if (r.weekday !== null && r.weekday !== void 0 && r.weekday !== weekdayIndex(now, tz)) continue;
       const date = localDate(now, tz);
       const id = await stableId(`rev:${r.id}:${date}`);
       const { data: ev } = await sb.from("reminder_events").select("*").eq("id", id).maybeSingle();
@@ -435,7 +446,7 @@ Deno.serve(async (req) => {
         stats.errors.push(error.message);
         continue;
       }
-      const copy = COPY[r.kind === "meal" ? r.slot : r.kind] ?? { title: r.label, body: "Tap to open NutriTrack." };
+      const copy = copyFor(r);
       let url = `/remind/${r.id}/${date}`;
       if (r.kind === "review") {
         try {
@@ -451,7 +462,7 @@ Deno.serve(async (req) => {
         url = `/report/${date}`;
       }
       await push(r.user_id, {
-        title: r.kind === "meal" || COPY[r.kind] ? copy.title : r.label,
+        title: copy.title,
         body: copy.body,
         url,
         tag: `r-${r.id}`,
@@ -463,7 +474,7 @@ Deno.serve(async (req) => {
       const r = ev.reminders;
       if (!r) continue;
       await sb.from("reminder_events").update({ status: "sent", snoozed_until: null, pushed_at: now.toISOString() }).eq("id", ev.id);
-      const copy = COPY[r.kind === "meal" ? r.slot : r.kind] ?? { title: r.label, body: "" };
+      const copy = copyFor(r);
       await push(ev.user_id, {
         title: copy.title,
         body: `Snoozed reminder. ${copy.body}`,
