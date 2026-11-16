@@ -1,13 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts'
 import { setWeight } from '../lib/actions'
 import { weekStats, weightStats } from '../lib/analytics'
 import { api } from '../lib/api'
 import { alive, db, sync } from '../lib/db'
 import { addDays, fmtDate, fmtShort, lastNDays, nowHHMM, today, weekStart } from '../lib/dates'
-import { useDays, usePrefs, useReminders, useTargets } from '../lib/hooks'
+import { useAccuracy, useDays, usePrefs, useReminders, useTargets } from '../lib/hooks'
 import { displayToKg, fmtBigVolume, kgToDisplay, unitsOf, weightUnit } from '../lib/units'
 import { renderWeekCard, shareCard } from '../lib/sharecard'
 import { useChartTheme } from '../lib/theme'
@@ -18,6 +18,8 @@ export default function Analytics() {
   const ct = useChartTheme()
   const tip = { contentStyle: ct.tooltip, cursor: { fill: ct.cursor } }
   const axis = { tick: ct.tick, axisLine: false, tickLine: false } as const
+  const nav = useNavigate()
+  const acc = useAccuracy()
   const [offset, setOffset] = useState(0) // weeks back
   const end = addDays(today(), -7 * offset)
   const dates = useMemo(() => lastNDays(end, 7), [end])
@@ -131,6 +133,18 @@ export default function Analytics() {
         <SectionTitle right={<Link to="/workouts" className="text-sm font-semibold text-leaf-700">Open</Link>}>Home workouts (optional)</SectionTitle>
         <WorkoutWeek workouts={workouts} end={end} />
       </>}
+
+      <SectionTitle>AI accuracy</SectionTitle>
+      <Card onClick={() => nav('/accuracy')}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-700"><Icon name="sparkle" size={22} /></div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">How close are the estimates?</div>
+            <div className="text-sm text-ink-500">{acc.meals ? `Median ${acc.medianAbsErrorPct}% off across ${acc.meals} corrected meals` : 'Appears once you have corrected a few photo meals'}</div>
+          </div>
+          <Icon name="right" size={18} className="text-ink-300" />
+        </div>
+      </Card>
 
       <SectionTitle>Daily reports</SectionTitle>
       <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-surface shadow-card">

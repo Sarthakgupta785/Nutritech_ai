@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState } from 'react'
+import { buildAccuracy, calibrationFrom, type AccuracyReport, type Calibration } from './accuracy'
 import { addDays, lastNDays, today } from './dates'
 import { alive, db, getSyncState, getUid, loadPhoto, onSync, type SyncState } from './db'
 import { sum, ZERO } from './nutrition'
@@ -84,3 +85,18 @@ export function useLoggingStreak(): StreakInfo {
     return { current, best: Math.max(best, current), week: lastNDays(now, 7).map(date => ({ date, logged: days.has(date) })) }
   }, []) ?? NO_STREAK
 }
+
+const NO_ACCURACY: AccuracyReport = { meals: 0, pairs: [], foods: [], addedByUser: 0, removedByUser: 0, accepted: 0, corrected: 0, medianAbsErrorPct: null, medianCorrectionPct: null, medianBiasPct: null }
+
+/** Every photo-analysed meal you later confirmed, compared against what the AI first proposed. */
+export async function loadAccuracy(days = 120): Promise<AccuracyReport> {
+  const from = addDays(today(), -(days - 1))
+  const meals = alive(await db.meals.where('local_date').between(from, today(), true, true).toArray())
+    .filter(m => m.status === 'logged' && m.ai_analysis)
+  const rows = []
+  for (const m of meals) rows.push({ local_date: m.local_date, ai_analysis: m.ai_analysis, items: alive(await db.meal_items.where('meal_id').equals(m.id).toArray()) })
+  return buildAccuracy(rows)
+}
+export const useAccuracy = (days = 120): AccuracyReport => useLiveQuery(() => loadAccuracy(days), [days]) ?? NO_ACCURACY
+/** Computed on demand, not on every render — the editor only needs it when a photo is analysed. */
+export const loadCalibration = async (): Promise<Calibration[]> => calibrationFrom(await loadAccuracy())

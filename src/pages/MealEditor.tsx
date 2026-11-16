@@ -8,7 +8,7 @@ import { api } from '../lib/api'
 import { alive, db, loadPhoto, patch, savePhoto } from '../lib/db'
 import { toLocalInput } from '../lib/dates'
 import { draftFromFood, FOOD_BY_ID, FOODS, matchesAvoid, SOURCE_LABEL } from '../lib/foods'
-import { useDay, usePhotoUrl, usePrefs } from '../lib/hooks'
+import { loadCalibration, useDay, usePhotoUrl, usePrefs } from '../lib/hooks'
 import { blobToBase64, compressImage } from '../lib/image'
 import { sum, withQuantity } from '../lib/nutrition'
 import type { AiAnalysis, ItemDraft, Slot } from '../lib/types'
@@ -59,6 +59,7 @@ export default function MealEditor() {
       const { analysis } = await api<{ analysis: AiAnalysis }>('analyze_meal', {
         image: await blobToBase64(blob), media_type: 'image/jpeg', refs: FOODS.map(f => ({ id: f.id, name: f.name })),
         hint: `${SLOT_LABEL[slot]}. The user often eats: ${(prefs?.preferred ?? []).join(', ')}.`,
+        portions: await loadCalibration(),   // how much of each food this person actually logs
       })
       await patch('meals', id, { ai_analysis: analysis })
       setRows(draftsFromAnalysis(analysis).map(d => row(d, d.quantity))); setDismissed([])

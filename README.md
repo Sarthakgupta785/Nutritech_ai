@@ -31,6 +31,7 @@ Built end to end from a written specification — see [How this was built](#how-
 - Manual logging from an 86-item reference database (Indian and common household foods) with live USDA lookup
 - Water, daily weight, favourites, meal duplication, and a photo journal of every day
 - A logging streak, and a weekly summary you can share as a single image
+- An accuracy page comparing what the AI proposed against what you confirmed, per food
 
 **Guidance**
 - Daily push reminders (hydration, meals, nightly review) plus a weekly weigh-in, each snoozable or skippable
@@ -150,6 +151,14 @@ A meal reminder is suppressed entirely if that meal is already logged or skipped
 **Confirmed data is the only source of truth.** AI output is a proposal. Nothing reaches a total, a
 report or the coach until the user presses confirm. Each item carries its provenance — reference
 value, typical recipe, AI estimate, or edited by you — and the badge is shown wherever the number is.
+
+**The app measures its own accuracy, then feeds it back.** Every photo-analysed meal stores both the
+AI's proposal and the values the user confirmed, which is the only ground truth available. Those pairs
+are matched (by reference id, then name, then containment), and reported honestly: accepted portions
+are counted separately from corrected ones, because a pile of untouched items would otherwise hide a
+large error behind a median of zero. Foods corrected at least twice are then sent with the next photo
+— "this person's rice servings have been 203 g, earlier estimates averaged 150 g" — so the model
+anchors on the user rather than on a generic serving. Fully covered by unit tests on synthetic meals.
 
 **Transport that expects the provider to wobble.** Model endpoints return 429s and 503s under load.
 Every AI call retries overload and gateway errors with exponential backoff and honours `Retry-After`,

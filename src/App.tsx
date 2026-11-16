@@ -16,6 +16,7 @@ import FoodLog from './pages/FoodLog'
 import MealNew from './pages/MealNew'
 import MealEditor from './pages/MealEditor'
 import MealDetail from './pages/MealDetail'
+import Accuracy from './pages/Accuracy'
 import Analytics from './pages/Analytics'
 import Coach from './pages/Coach'
 import Profile from './pages/Profile'
@@ -77,6 +78,7 @@ function Shell() {
         <Route path="/meal/:id/edit" element={<MealEditor />} />
         <Route path="/meal/:id" element={<MealDetail />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/accuracy" element={<Accuracy />} />
         <Route path="/report/:date" element={<Report />} />
         <Route path="/coach" element={<Coach />} />
         <Route path="/profile" element={<Profile />} />

@@ -454,6 +454,11 @@ var ANALYZE_TOOL = {
 async function analyzeMeal(b) {
   if (!b.image) throw new Error("No image supplied");
   const refs = Array.isArray(b.refs) ? b.refs.slice(0, 200).map((r) => `${r.id}: ${r.name}`).join("\n") : "";
+  const cal = Array.isArray(b.portions) ? b.portions.slice(0, 25) : [];
+  const calibration = cal.length ? `
+
+This person's own confirmed portions, from ${cal.reduce((n, c) => n + (c.samples || 0), 0)} corrected meals. Where you see one of these foods, start from THEIR usual amount and adjust only for what the photo clearly shows to be more or less than usual:
+` + cal.map((c) => `- ${c.name}: usually ${Math.round(c.your_typical_g)} g (earlier estimates averaged ${Math.round(c.ai_typical_g)} g, over ${c.samples} meals)`).join("\n") : "";
   const out = await ai({
     system: `You estimate the contents of meal photographs for a food diary. Be careful and honest about uncertainty.
 - List every distinct visible food, drink, sauce, chutney and visible oil/butter separately.
@@ -462,7 +467,7 @@ async function analyzeMeal(b) {
 - Identify the cooking method only when visible cues support it; otherwise null.
 - Set ref_id only for a confident match to the reference list. For mixed dishes not in the list use null.
 - If the image contains no food, return an empty items array and explain in assumptions.
-- Context only (do not let it override what you see): ${String(b.hint || "no extra context").slice(0, 300)}`,
+- Context only (do not let it override what you see): ${String(b.hint || "no extra context").slice(0, 300)}${calibration}`,
     messages: [{ role: "user", content: [
       { type: "image", source: { type: "base64", media_type: b.media_type || "image/jpeg", data: b.image } },
       { type: "text", text: `Reference food ids:
