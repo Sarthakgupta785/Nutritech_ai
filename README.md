@@ -1,15 +1,10 @@
 # NutriTrack AI
 
-Personal AI nutrition and fat-loss assistant. An installable iPhone web app (PWA): meal reminders by push
-notification, photo-based food recognition with a confirm-and-correct step, manual logging, water and weight
-tracking, an AI coach that reads your own records, a nightly AI report, weekly analytics, and an optional
-equipment-free home workout module.
+A personal AI nutrition and fat-loss assistant, built as an installable iPhone web app. Photograph a
+meal, let a vision model identify and portion it, correct what it got wrong, and get push reminders,
+a nightly AI report and weekly analytics built from your own confirmed records.
 
-**Stack:** React + TypeScript + Tailwind (Vite PWA) · Supabase (Postgres, Auth, Storage, Edge Functions, pg_cron) ·
-Google Gemini vision/LLM (Claude also supported) · Web Push (VAPID) · Recharts.
-
-
-## Screenshots
+Built end to end from a written specification — see [How this was built](#how-this-was-built).
 
 <table>
 <tr>
@@ -26,164 +21,264 @@ Google Gemini vision/LLM (Claude also supported) · Web Push (VAPID) · Recharts
 
 ---
 
-## Setup (about 30 minutes, once)
+## What it does
 
-You need a computer with [Node 20.19+](https://nodejs.org) for these steps. Afterwards everything runs from your iPhone.
+**Logging**
+- Photograph a meal; a vision model identifies each food, estimates portions, and flags what it could not judge
+- Every estimate is editable before it counts — quantities, nutrition, cooking method, missing items
+- Asks about hidden cooking oil, dressings and sauces when they would materially change the numbers
+- Manual logging from an 86-item reference database (Indian and common household foods) with live USDA lookup
+- Water, daily weight, favourites, meal duplication, and a photo journal of every day
 
-### 1. Create the accounts and keys
+**Guidance**
+- Seven daily push reminders (hydration, four meals, nightly review), each snoozable or skippable
+- An AI coach that answers from your actual targets, preferences and food log rather than generic advice
+- A nightly report: ten specific questions answered, plus three concrete actions for tomorrow
+- Weekly analytics — trends, meal consistency, reminder completion, and a 7-day weight average
 
-| What | Where | You get |
+**Optional**
+- An equipment-free home workout module: 22 illustrated exercises, a routine generator, guided sessions
+- Entirely optional by design. Nutrition tracking is unaffected if it is never opened
+
+---
+
+## How this was built
+
+The application was produced from a specification rather than written by hand. The spec —
+[`docs/PROMPT.md`](docs/PROMPT.md), with [`docs/PROMPT-workout-module.md`](docs/PROMPT-workout-module.md)
+as a follow-up — was written first and defines the product, the personal profile, the data model, the
+accuracy and safety rules, the stack and the build order. An AI coding agent implemented it, and each
+stage was checked back against the spec. Commits are co-authored accordingly.
+
+What made the specification work, rather than producing the usual non-functional mockup:
+
+| Technique | In practice |
+|---|---|
+| **Constraints, not wishes** | "Do not pretend that a photograph provides exact food weights or calories." "Never invent precise nutritional information." These became the confidence labels and source badges in the UI. |
+| **Define the edges** | "If I have not logged a meal, do not assume I skipped it. Mark it as unlogged." Unlogged, skipped and logged stay three distinct states through the database, reports and analytics. |
+| **Refuse plausible-but-wrong defaults** | "Do not assume 1,200 kcal is appropriate for me. Calculate from my profile, explain the assumptions." The app shows its working and blocks over-restrictive targets. |
+| **Name the stack and the target** | React, Supabase, PWA on an iPhone Home Screen — stated up front, so no step produced something that could not ship. |
+| **Order the delivery** | Ten numbered phases from project structure to deployment, so the build could be checked stage by stage. |
+| **Demand working software** | "Do not leave essential features as fake buttons or placeholders." "If a feature cannot be supported reliably on iOS PWA, explain the limitation and implement the best working alternative." |
+
+---
+
+## Tech stack
+
+| Layer | Choice | Version |
 |---|---|---|
-| Supabase project (free tier is enough) | supabase.com → New project | Project URL, anon/publishable key, project ref |
-| Gemini API key | aistudio.google.com → Get API key | `GEMINI_API_KEY` |
-| VAPID keys for push | run `npm install && npm run vapid` in this folder | public + private key |
-| Cron secret | invent a long random string | `CRON_SECRET` |
-| USDA key (optional, for online food search) | fdc.nal.usda.gov/api-key-signup | `FDC_API_KEY` |
+| UI | React + TypeScript | 19.3 / 7.0 |
+| Build | Vite + `vite-plugin-pwa` (Workbox) | 8.3 / 2.0 |
+| Styling | Tailwind CSS | 3.4 |
+| Charts | Recharts | 3.10 |
+| Routing | React Router | 7.18 |
+| Local store | Dexie (IndexedDB) | 4.4 |
+| Backend | Supabase — Postgres, Auth, Storage, Edge Functions (Deno) | `supabase-js` 2.119 |
+| Scheduling | `pg_cron` + `pg_net`, firing every minute |
+| AI | Google Gemini (vision + text), provider-swappable to Anthropic Claude |
+| Notifications | Web Push — VAPID (RFC 8292) + aes128gcm payloads (RFC 8291) |
+| Tests | Vitest | 5.1 |
+| Hosting | Vercel (static) + Supabase (backend) |
 
-### 2. Create the database
+About 4,100 lines of TypeScript across 47 files.
 
-Supabase dashboard → **SQL Editor** → run these files in order (paste the whole file, press Run):
+## Architecture
 
-1. `supabase/migrations/0001_schema.sql` — tables, Row Level Security, private photo bucket
-2. `supabase/migrations/0002_seed_foods.sql` — built-in reference foods
+```mermaid
+flowchart TB
+    subgraph Phone["iPhone — installed PWA"]
+        UI["React UI"]
+        SW["Service worker<br/>offline shell + push"]
+        IDB[("IndexedDB<br/>Dexie")]
+    end
+    subgraph SB["Supabase"]
+        PG[("Postgres<br/>17 tables, RLS")]
+        ST["Storage<br/>private bucket"]
+        API["Edge function: api"]
+        TICK["Edge function: tick"]
+        CRON["pg_cron — every minute"]
+    end
+    GEM["Google Gemini"]
+    APNS["Apple Push Service"]
 
-Optional but convenient for a single-user app: **Authentication → Sign In / Providers → Email → turn off "Confirm email"**,
-so you can sign in immediately after creating your account. Once your account exists you can also turn off
-"Allow new users to sign up" so nobody else can register.
+    UI <--> IDB
+    IDB <-->|"sync: dirty push / cursor pull"| PG
+    UI -->|"meal photos"| ST
+    UI -->|"analyse · coach · report"| API
+    API --> GEM
+    API --> PG
+    CRON --> TICK
+    TICK --> PG
+    TICK -->|"Web Push"| APNS
+    APNS --> SW
+    SW --> UI
+```
 
-### 3. Deploy the backend functions
+The browser never holds an AI key. Every model call goes through the `api` edge function, which
+authenticates the user's JWT first and reads its keys from Supabase function secrets.
 
-No command line? Deploy both functions from the Supabase dashboard instead
-(**Edge Functions → Deploy a new function → Via Editor**), pasting the single-file
-builds in [`deploy/`](deploy/). Set the secrets below under **Edge Functions → Secrets**.
-Otherwise, with the CLI:
+## Engineering notes
+
+**Offline-first, not offline-tolerant.** Every screen reads and writes IndexedDB; the network is a
+background concern. Local rows carry a `_dirty` flag and are pushed on reconnect; remote changes are
+pulled by `updated_at` cursor per table. Deletes are soft, so a delete on one device survives the
+merge. Photos queue as blobs and upload separately. Meals, water, weight and workouts can all be
+logged with no connection; only the AI features require one.
+
+**Web Push implemented from scratch.** Supabase Edge Functions run on Deno, so the usual `web-push`
+npm package is awkward. `supabase/functions/_shared/webpush.ts` implements RFC 8291 payload encryption
+and RFC 8292 VAPID signing directly on Web Crypto, with no dependencies — about 60 lines. It is
+unit-tested by playing the browser's side: generating a subscription key pair, encrypting a message,
+then deriving the shared secret and decrypting it back.
+
+**Timezone-correct scheduling.** Days are bucketed by `Intl.DateTimeFormat('en-CA')` in the user's
+zone rather than by UTC offset, so a meal logged at 1 a.m. lands on the right day. The scheduler
+compares each reminder against local wall-clock time per user, so reminders stay correct across
+travel and DST. The app writes its current timezone back on every launch.
+
+**Idempotent reminders.** Reminder events use a UUID derived by SHA-256 from
+`reminder id + date`, computed identically in the app and in the edge function. Two overlapping
+scheduler runs cannot double-send, and the phone and server converge on the same row offline.
+A meal reminder is suppressed entirely if that meal is already logged or skipped.
+
+**Confirmed data is the only source of truth.** AI output is a proposal. Nothing reaches a total, a
+report or the coach until the user presses confirm. Each item carries its provenance — reference
+value, typical recipe, AI estimate, or edited by you — and the badge is shown wherever the number is.
+
+**Structured model output.** Photo analysis, daily reports and workout feedback use typed schemas
+rather than parsed prose. A small converter maps JSON Schema to Gemini's `responseSchema` dialect
+(upper-case types, `nullable` in place of `["string","null"]`), so the same tool definitions work
+against either Gemini or Claude's tool-use API.
+
+**Safety as a product requirement.** Calorie targets below the clinical floor cannot be saved without
+explicitly confirming professional approval. Exercise energy is an estimate shown separately and never
+added back to the food budget. The model prompts forbid crash-dieting advice, shaming, and treating an
+unlogged meal as a skipped one. Weight trends are read from a 7-day moving average, never single days.
+
+**Exercise illustrations without assets.** The 22 exercises are drawn from keyframe poses — eleven
+joints per pose — interpolated at runtime into a looping SVG animation, with direction arrows derived
+by finding the joints that travel furthest between frames. No images, no video, no licensing.
+
+**Security.** Row Level Security on all 17 tables; every policy scopes rows to `auth.uid()`. Meal
+photos live in a private bucket partitioned by user id, enforced by a storage policy. The publishable
+key in the client is safe by design — the database, not secrecy, does the access control.
+
+## Data model
+
+17 tables, all under RLS: `profiles`, `nutrition_targets`, `user_preferences`, `foods`,
+`favourite_meals`, `meals`, `meal_items`, `meal_photos`, `reminders`, `reminder_events`,
+`water_logs`, `weight_logs`, `daily_reports`, `weekly_reports`, `coach_messages`, `workouts`,
+`push_subscriptions`.
+
+Schema in [`supabase/migrations/0001_schema.sql`](supabase/migrations/0001_schema.sql); the 86
+reference foods are generated into `0002_seed_foods.sql` from `src/lib/foods.ts`, so the app and the
+database cannot drift.
+
+## Testing
 
 ```bash
-npx supabase login
+npm test
+```
+
+18 unit tests covering the parts where being wrong is expensive: the Mifflin-St Jeor energy
+calculation and target guardrails, food scaling and the per-100g round trip, an Atwater
+plausibility check across all 86 reference foods, timezone day-bucketing, the weight moving average,
+the workout generator's time and impact constraints, the Gemini schema converter, and the Web Push
+encrypt/decrypt round trip.
+
+The production build was also driven end to end in headless Chrome at iPhone viewport against an
+in-memory stand-in for Supabase: onboarding and the restrictive-target block, photo → AI proposal →
+edit → confirm, dashboard totals, manual logging, reports, coach, reminders and snooze, a workout
+session, and offline logging followed by automatic sync.
+
+---
+
+## Setup
+
+You need a Supabase project and a Gemini API key. Roughly 30 minutes, once.
+
+### 1. Database
+
+Supabase → **SQL Editor**, run in order:
+
+1. [`supabase/migrations/0001_schema.sql`](supabase/migrations/0001_schema.sql) — tables, RLS, private photo bucket
+2. [`supabase/migrations/0002_seed_foods.sql`](supabase/migrations/0002_seed_foods.sql) — reference foods
+
+Then **Database → Extensions**: enable `pg_cron` and `pg_net`.
+
+### 2. Secrets
+
+Generate a VAPID key pair with `npm run vapid`, then add under **Edge Functions → Secrets**:
+
+| Secret | Value |
+|---|---|
+| `GEMINI_API_KEY` | from Google AI Studio |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | from `npm run vapid` |
+| `VAPID_SUBJECT` | `mailto:you@example.com` |
+| `CRON_SECRET` | any long random string |
+| `FDC_API_KEY` | optional — USDA online food search |
+| `AI_MODEL` | optional — defaults to `gemini-3.8-flash` |
+
+To use Claude instead of Gemini, set `ANTHROPIC_API_KEY` and leave `GEMINI_API_KEY` unset.
+
+### 3. Edge functions
+
+Without a command line: **Edge Functions → Deploy a new function → Via Editor**, pasting the
+single-file builds in [`deploy/`](deploy/) — as `api` and `tick` respectively.
+
+With the CLI:
+
+```bash
 npx supabase link --project-ref YOUR-PROJECT-REF
-
-npx supabase secrets set \
-  GEMINI_API_KEY=your-gemini-key \
-  VAPID_PUBLIC_KEY=... \
-  VAPID_PRIVATE_KEY=... \
-  VAPID_SUBJECT=mailto:you@example.com \
-  CRON_SECRET=your-long-random-string
-# optional: FDC_API_KEY=...   AI_MODEL=gemini-3.8-flash (default; any vision-capable Gemini model id works)
-# To use Claude instead, set ANTHROPIC_API_KEY and leave GEMINI_API_KEY unset.
-
 npx supabase functions deploy api
 npx supabase functions deploy tick --no-verify-jwt
 ```
 
-These secrets live only on Supabase. No AI key is ever shipped to the browser.
+### 4. Scheduler
 
-### 4. Turn on the reminder scheduler
-
-Open `supabase/migrations/0003_cron.sql`, replace `YOUR-PROJECT-REF` and `YOUR-CRON-SECRET`, and run it in the SQL Editor.
-It calls the `tick` function once a minute. (If the editor says pg_cron or pg_net is unavailable, enable both under
-**Database → Extensions** first.)
+Edit [`supabase/migrations/0003_cron.sql`](supabase/migrations/0003_cron.sql) with your project ref,
+cron secret and service key, and run it in the SQL Editor. It calls `tick` once a minute.
 
 ### 5. Deploy the app
 
-```bash
-cp .env.example .env      # fill in the three values
-npm run build             # type-checks and builds into dist/
+Connect the repo to Vercel or Netlify (build `npm run build`, output `dist`) and set three
+environment variables:
+
+```
+VITE_SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_...
+VITE_VAPID_PUBLIC_KEY=...
 ```
 
-Then publish the `dist` folder to any static HTTPS host:
+### 6. Install on iPhone
 
-- **Netlify (easiest):** drag the `dist` folder onto app.netlify.com/drop.
-- **Vercel:** `npx vercel dist --prod`.
-- Or connect a Git repo to either host: build command `npm run build`, output `dist`, and add the three `VITE_…`
-  variables in the host's environment settings.
+Open the address in **Safari** → **Share** → **Add to Home Screen**. Open it from the new icon —
+push notifications only work from the installed app — then **Profile → Notifications → Enable**.
 
-### 6. Install on your iPhone
-
-1. Open your app's HTTPS address in **Safari**.
-2. Tap **Share** → **Add to Home Screen** → **Add**.
-3. Open **NutriTrack** from the new Home Screen icon (this matters: push only works from the installed app).
-4. Create your account, complete onboarding (confirm sex, age, targets).
-5. **Profile → Notifications → Enable notifications** → Allow. Tap **Send a test**.
-
-No App Store is involved. The app has its own icon, name and full-screen launch.
+Requires iOS 16.4 or later. No App Store involved.
 
 ---
 
-## How notifications work, and iOS limits
-
-- Reminders are **real Web Push notifications** sent by the server, so they arrive when the app is closed and the phone is locked.
-  The `tick` function runs every minute, compares each reminder with your phone's timezone, and pushes the ones that are due.
-- **Requirements on iPhone:** iOS 16.4 or later; the app must be added to the Home Screen from Safari; permission must be
-  granted by tapping the button inside the installed app.
-- **Snooze / Completed / Skipped:** tapping a reminder opens a screen with *Log now*, *Snooze 10 min*, *Snooze 15 min*,
-  *Mark as completed* and *Mark as skipped*. Snooze is handled by the server, which re-sends the reminder on time. The
-  notification also carries Snooze action buttons, but iOS does not reliably show action buttons for web apps, so the
-  in-app screen is the dependable route.
-- A meal reminder is not sent if that meal is already logged or marked skipped.
-- Delivery timing is up to about a minute after the scheduled time. Focus modes and Low Power Mode can delay or silence notifications.
-- iOS can drop a push subscription if the app is unused for a long time; the app re-registers every time you open it.
-  Deleting the Home Screen icon deletes the app's local data (your synced data stays in Supabase).
-- 9:30 PM review: the server writes the daily report first, then notifies you. On Sundays it also writes the weekly report.
-
-## Accuracy and data sources
-
-- A photo cannot give exact weights or calories. Every AI value is labelled **AI estimate** with a confidence level;
-  unclear portions are flagged and ask for grams, S/M/L, or confirmation; hidden oil and sauces are asked about.
-- Nothing counts until you press **Confirm and save**. Confirmed items are the only source for totals, reports and the coach.
-- Built-in foods (86) are labelled **Reference** (rounded standard values for the plain food, USDA FoodData Central)
-  or **Typical recipe** (mixed dishes such as curries and biryani, where real recipes vary). These were entered by hand
-  from standard figures and sanity-tested for internal consistency; spot-check the ones you eat most against a label.
-  The **Search USDA database online** button pulls live values from the USDA API.
-- Calorie targets are calculated with the Mifflin-St Jeor equation and shown with their assumptions. Targets below
-  1,500 kcal (men) / 1,200 kcal (women), or well below resting needs, cannot be saved unless you confirm a professional approved them.
-- Workout calories are MET-based estimates, displayed separately and never added to or subtracted from food.
-
-## Offline
-
-All screens read and write a local database on the phone. Meals (including photos), water, weight and workouts can be
-logged with no connection and sync automatically when you are back online. AI features (photo analysis, coach, reports) need a connection.
-
-## Security and backups
-
-- Row Level Security on every table: a user can only read or write rows where `user_id` is their own id.
-- Photos are in a private storage bucket, in a folder named after your user id, readable only by you.
-- AI, VAPID private and cron keys are Supabase function secrets. The browser only holds the anon key, which is safe to expose under RLS.
-- Backups: Supabase Pro includes daily backups; on the free tier use **Profile → Export my data** periodically, or
-  `npx supabase db dump -f backup.sql`. Free-tier projects pause after about a week without activity; the every-minute scheduler keeps yours active.
-
-## Running costs
-
-Supabase free tier covers one user. AI usage runs on your Gemini API key: roughly one vision call per meal photo plus a few short
-text calls per day. Check your key's free-tier limits and billing in Google AI Studio.
-
-## Development
-
-```bash
-npm run dev        # local dev server
-npm test           # unit tests: energy maths, food maths, dates, weight trend, workout generator, Web Push crypto
-npm run build      # type-check + production build
-npm run seed:sql   # regenerate 0002_seed_foods.sql after editing src/lib/foods.ts
-```
-
-### What was tested before handover
-
-- Unit tests (18) pass, including a round-trip that decrypts the Web Push payload the server produces and verifies the VAPID signature.
-- The production build was driven end to end in headless Chrome at iPhone size against an in-memory stand-in for
-  Supabase: sign-in, onboarding and the restrictive-target block, photo → AI proposal → edit → confirm, dashboard totals,
-  photo journal, manual logging, daily and weekly reports, coach, reminders and snooze, a workout session, and
-  offline logging followed by automatic sync.
-- **Not testable without your accounts:** the live Supabase project, real Gemini responses (the request/response adapter is unit-tested, but no live call was made), and actual push delivery
-  to an iPhone. After setup, use *Send a test* and log one meal to confirm each of these.
-
-## Project map
+## Project structure
 
 ```
-src/pages/            Home, Food Log + photo journal, meal flow, Analytics, Report, AI Coach, Profile, reminder screen
-src/workouts/         Optional module: library (22 exercises, animated figures), generator, session, logging
-src/lib/              db.ts (offline store + sync), nutrition.ts, foods.ts, analytics.ts, push.ts, actions.ts
-src/sw.ts             Service worker: offline app shell, push, notification taps
+src/pages/            Home, Food Log + photo journal, meal flow, Analytics, Report, Coach, Profile
+src/workouts/         Optional module: 22-exercise library, SVG figure, generator, session, logging
+src/lib/              db.ts (offline store + sync), nutrition.ts, foods.ts, analytics.ts, push.ts
+src/sw.ts             Service worker: offline shell, push, notification taps
 supabase/migrations/  Schema + RLS, food seed, scheduler
-supabase/functions/   api (AI vision, coach, reports, USDA search, test push) · tick (reminder scheduler) · _shared
+supabase/functions/   api (vision, coach, reports, USDA, test push) · tick (scheduler) · _shared
+deploy/               Single-file builds of both functions, for dashboard deployment
+docs/                 The original specifications, and screenshots
 ```
 
-NutriTrack AI gives estimates and general guidance. It is not a medical device and does not replace a doctor or dietitian.
+## Honest limitations
+
+- A photograph cannot give exact weights. Values are estimates, labelled as such, and intended to be corrected.
+- Reference foods were entered from standard USDA figures and sanity-checked for internal consistency; mixed dishes are "typical recipe" values, because real recipes vary.
+- iOS delivers push only to Home Screen web apps, and may drop a subscription if the app goes unused for a long time — the app re-registers on every launch.
+- Notification action buttons are unreliable on iOS, so tapping a reminder opens a screen carrying the same choices.
+- Free-tier Supabase projects pause after about a week of inactivity; the every-minute scheduler keeps this one awake.
+
+NutriTrack AI gives estimates and general guidance. It is not a medical device and does not replace a
+doctor or dietitian.
