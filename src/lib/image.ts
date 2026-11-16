@@ -16,6 +16,14 @@ async function loadBitmap(file: Blob): Promise<ImageBitmap | HTMLImageElement> {
     img.src = url
   })
 }
+/**
+ * The copy sent to the vision model. Smaller than the stored photo on purpose: image tokens drive
+ * both latency and cost, and two passes double both. 896px is ample for identifying food and judging
+ * a portion; the full-size photo is kept for the journal. Nutrition labels are not downscaled —
+ * small print needs the detail.
+ */
+export const forAnalysis = (blob: Blob) => compressImage(blob, 896, 0.72)
+
 export function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1]); r.onerror = () => reject(r.error); r.readAsDataURL(blob)

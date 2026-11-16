@@ -93,9 +93,13 @@ export async function loadAccuracy(days = 120): Promise<AccuracyReport> {
   const from = addDays(today(), -(days - 1))
   const meals = alive(await db.meals.where('local_date').between(from, today(), true, true).toArray())
     .filter(m => m.status === 'logged' && m.ai_analysis)
-  const rows = []
-  for (const m of meals) rows.push({ local_date: m.local_date, ai_analysis: m.ai_analysis, items: alive(await db.meal_items.where('meal_id').equals(m.id).toArray()) })
-  return buildAccuracy(rows)
+  if (!meals.length) return buildAccuracy([])
+  // One query for every item, grouped in memory: a query per meal meant hundreds of round trips
+  // after a few months of history, all of it before the photo could even be sent.
+  const items = alive(await db.meal_items.where('meal_id').anyOf(meals.map(m => m.id)).toArray())
+  const byMeal = new Map<string, typeof items>()
+  for (const it of items) byMeal.set(it.meal_id, [...(byMeal.get(it.meal_id) ?? []), it])
+  return buildAccuracy(meals.map(m => ({ local_date: m.local_date, ai_analysis: m.ai_analysis, items: byMeal.get(m.id) ?? [] })))
 }
 export const useAccuracy = (days = 120): AccuracyReport => useLiveQuery(() => loadAccuracy(days), [days]) ?? NO_ACCURACY
 /** Computed on demand, not on every render — the editor only needs it when a photo is analysed. */

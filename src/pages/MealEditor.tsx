@@ -10,7 +10,7 @@ import { toLocalInput } from '../lib/dates'
 import { draftFromFood, FOOD_BY_ID, FOODS, matchesAvoid, SOURCE_LABEL } from '../lib/foods'
 import { loadCalibration, useDay, usePhotoUrl, usePrefs } from '../lib/hooks'
 import { useDoubleCheck } from '../lib/settings'
-import { blobToBase64, compressImage } from '../lib/image'
+import { blobToBase64, compressImage, forAnalysis } from '../lib/image'
 import { sum, withQuantity } from '../lib/nutrition'
 import type { AiAnalysis, ItemDraft, Slot } from '../lib/types'
 import { Badge, Button, Card, Icon, Input, Note, NumInput, Page, Spinner, cx, fmt, inputCls } from '../components/ui'
@@ -18,6 +18,19 @@ import { Badge, Button, Card, Icon, Input, Note, NumInput, Page, Spinner, cx, fm
 type Row = ItemDraft & { _key: string; _base?: number; _note?: string }
 const METHODS = ['raw', 'boiled', 'steamed', 'grilled', 'roasted', 'baked', 'pan-fried', 'deep-fried', 'curry']
 let seq = 0
+
+const STAGES = ['Preparing the photo…', 'Looking at what is on the plate…', 'Estimating portions…', 'Comparing the two estimates…', 'Almost there…']
+/** A narrated wait feels shorter than a silent one, and these steps are what is really happening. */
+function useAnalysisStage(active: boolean, twoPass: boolean): string {
+  const steps = twoPass ? STAGES : STAGES.filter(s => !s.startsWith('Comparing'))
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    if (!active) { setI(0); return }
+    const t = setInterval(() => setI(n => Math.min(n + 1, steps.length - 1)), 2600)
+    return () => clearInterval(t)
+  }, [active, twoPass]) // eslint-disable-line react-hooks/exhaustive-deps
+  return steps[i]
+}
 const row = (d: ItemDraft, base?: number, note?: string): Row => ({ ...d, _key: `k${seq++}`, _base: base, _note: note })
 const strip = ({ _key, _base, _note, ...d }: Row): ItemDraft => d
 
@@ -36,6 +49,7 @@ export default function MealEditor() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [name, setName] = useState(''), [slot, setSlot] = useState<Slot>('other'), [eatenAt, setEatenAt] = useState('')
   const [analysing, setAnalysing] = useState(false), [err, setErr] = useState('')
+  const stage = useAnalysisStage(analysing, doubleCheck)
   const [search, setSearch] = useState(params.get('add') === '1')
   const [scan, setScan] = useState(params.get('scan') === '1')
   const [dismissed, setDismissed] = useState<number[]>([])
@@ -58,10 +72,15 @@ export default function MealEditor() {
     setAnalysing(true)
     try {
       const blob = await loadPhoto(id); if (!blob) throw new Error('Photo not found on this device')
+      // Shrinking the image and reading past corrections are independent; neither should wait on the other.
+      const [image, portions] = await Promise.all([
+        forAnalysis(blob).then(blobToBase64),
+        loadCalibration(),                 // how much of each food this person actually logs
+      ])
       const { analysis } = await api<{ analysis: AiAnalysis }>('analyze_meal', {
-        image: await blobToBase64(blob), media_type: 'image/jpeg', refs: FOODS.map(f => ({ id: f.id, name: f.name })),
+        image, media_type: 'image/jpeg', refs: FOODS.map(f => ({ id: f.id, name: f.name })),
         hint: `${SLOT_LABEL[slot]}. The user often eats: ${(prefs?.preferred ?? []).join(', ')}.`,
-        portions: await loadCalibration(),   // how much of each food this person actually logs
+        portions,
         passes: doubleCheck ? 2 : 1,         // two passes: disagreement tells the user what to check
       })
       await patch('meals', id, { ai_analysis: analysis })
@@ -122,7 +141,7 @@ export default function MealEditor() {
       ) : <div className="flex h-40 items-center justify-center rounded-3xl bg-ink-100"><Spinner /></div>}
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => onPhoto(e.target.files?.[0])} />
 
-      {analysing && <Card className="mt-3 flex items-center gap-3"><Spinner /><div><div className="font-semibold">Analysing your meal…</div><div className="text-sm text-ink-500">{doubleCheck ? 'Estimating twice, to see where the two agree' : 'Identifying foods and estimating portions'}</div></div></Card>}
+      {analysing && <Card className="mt-3 flex items-center gap-3"><Spinner /><div><div className="font-semibold">Analysing your meal…</div><div className="text-sm text-ink-500">{stage}</div></div></Card>}
       {err && <div className="mt-3"><Note tone="warn">{err}</Note></div>}
 
       {analysis && !analysing && (
