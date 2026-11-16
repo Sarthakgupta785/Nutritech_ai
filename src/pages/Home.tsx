@@ -4,8 +4,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { addWater, guessSlot, markSkipped, setReminderStatus } from '../lib/actions'
 import { alive, db, remove } from '../lib/db'
 import { fmtDate, fmtHHMM, nowHHMM, today } from '../lib/dates'
-import { mealSlots, slotStatus, useDay, useNow, usePrefs, useProfile, useReminders, useSyncState, useTargets } from '../lib/hooks'
-import { Bar, Button, Card, Icon, NumInput, Ring, Sheet, fmt } from '../components/ui'
+import { mealSlots, slotStatus, useDay, useLoggingStreak, useNow, usePrefs, useProfile, useReminders, useSyncState, useTargets } from '../lib/hooks'
+import { bigVolumeUnit, fmtBigVolume, unitsOf, volumeUnit, waterPresets } from '../lib/units'
+import { Bar, Button, Card, Icon, NumInput, Ring, Sheet, Skeleton, SkeletonCard, cx, fmt } from '../components/ui'
 
 export default function Home() {
   const nav = useNavigate()
@@ -15,8 +16,11 @@ export default function Home() {
   const day = useDay(date), sync = useSyncState()
   const workouts = useLiveQuery(async () => alive(await db.workouts.where('local_date').equals(date).toArray()), [date]) ?? []
   const report = useLiveQuery(async () => alive(await db.daily_reports.where('local_date').equals(date).toArray())[0], [date])
+  const streak = useLoggingStreak()
+  const u = unitsOf(prefs)
+  const presets = waterPresets(u)
   const [waterOpen, setWaterOpen] = useState(false), [custom, setCustom] = useState(300)
-  if (!targets) return null
+  if (!targets) return <HomeSkeleton />
 
   const t = day.totals, remaining = targets.kcal - t.kcal
   const hour = new Date().getHours()
@@ -44,7 +48,7 @@ export default function Home() {
           <h1 className="text-[30px] font-bold leading-9 tracking-tight">{greeting}{profile?.name ? `, ${profile.name.split(' ')[0]}` : ''}</h1>
         </div>
         {(!sync.online || sync.pending > 0) && (
-          <span className="mt-1 flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-ink-500 shadow-card"><Icon name="cloud" size={14} />{sync.online ? 'Syncing' : 'Offline'}</span>
+          <span className="mt-1 flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-semibold text-ink-500 shadow-card"><Icon name="cloud" size={14} />{sync.online ? 'Syncing' : 'Offline'}</span>
         )}
       </header>
 
@@ -76,6 +80,19 @@ export default function Home() {
         <div className="text-[11px] text-ink-400">All food values are estimates from your confirmed entries.</div>
       </Card>
 
+      {streak.week.length > 0 && (
+        <Card className="mt-3 flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-800"><Icon name="flame" size={22} /></div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">{streak.current === 0 ? 'Start a logging streak' : `${streak.current} day${streak.current === 1 ? '' : 's'} in a row`}</div>
+            <div className="text-[13px] text-ink-500">{streak.current === 0 ? 'Log one meal today to begin.' : streak.best > streak.current ? `Your best is ${streak.best} days.` : 'This is your best run so far.'}</div>
+          </div>
+          <div className="flex shrink-0 gap-1">
+            {streak.week.map(d => <div key={d.date} className={cx('h-5 w-2 rounded-full', d.logged ? 'bg-leaf-500' : 'bg-ink-200')} title={d.date} />)}
+          </div>
+        </Card>
+      )}
+
       {due && (
         <Card className="mt-3 border border-leaf-200 bg-leaf-50">
           <div className="flex items-center gap-2 text-leaf-900"><Icon name="bell" size={20} /><b>{due.label}</b><span className="text-sm text-leaf-800">was due at {fmtHHMM(due.time)}</span></div>
@@ -90,11 +107,10 @@ export default function Home() {
       <div className="mt-3 grid grid-cols-2 gap-3">
         <Card onClick={() => setWaterOpen(true)}>
           <div className="flex items-center gap-1.5 text-sky-600"><Icon name="drop" size={18} /><span className="text-[13px] font-semibold">Water</span></div>
-          <div className="num mt-2 text-2xl font-bold">{fmt(day.water / 1000, 2)}<span className="text-base font-semibold text-ink-500"> / {fmt(targets.water_ml / 1000, 1)} L</span></div>
+          <div className="num mt-2 text-2xl font-bold">{fmtBigVolume(day.water, u).replace(/ .*/, '')}<span className="text-base font-semibold text-ink-500"> / {fmtBigVolume(targets.water_ml, u, 1)}</span></div>
           <div className="mt-2"><Bar value={day.water} max={targets.water_ml} color="bg-sky-400" /></div>
           <div className="mt-3 flex gap-2">
-            <Button size="sm" variant="soft" className="flex-1 !bg-sky-50 !text-sky-700" onClick={e => { e.stopPropagation(); void addWater(250) }}>+250</Button>
-            <Button size="sm" variant="soft" className="flex-1 !bg-sky-50 !text-sky-700" onClick={e => { e.stopPropagation(); void addWater(500) }}>+500</Button>
+            {presets.map(w => <Button key={w.label} size="sm" variant="soft" className="flex-1 !bg-sky-50 !text-sky-700" onClick={e => { e.stopPropagation(); void addWater(w.ml) }}>{w.label}</Button>)}
           </div>
         </Card>
         <Card>
@@ -132,13 +148,24 @@ export default function Home() {
 
       <Sheet open={waterOpen} onClose={() => setWaterOpen(false)} title="Water">
         <div className="grid grid-cols-2 gap-3">
-          <Button variant="outline" size="lg" onClick={() => addWater(250)}>+ 250 ml</Button>
-          <Button variant="outline" size="lg" onClick={() => addWater(500)}>+ 500 ml</Button>
+          {presets.map(w => <Button key={w.label} variant="outline" size="lg" onClick={() => addWater(w.ml)}>{w.label.replace('+', '+ ')}{u === 'metric' ? ' ml' : ''}</Button>)}
         </div>
-        <div className="mt-3 flex gap-3"><NumInput value={custom} onChange={setCustom} aria-label="Custom amount in ml" /><Button size="lg" className="shrink-0" onClick={() => { void addWater(custom); setWaterOpen(false) }}>Add ml</Button></div>
+        <div className="mt-3 flex gap-3"><NumInput value={custom} onChange={setCustom} aria-label={`Custom amount in ${volumeUnit(u)}`} /><Button size="lg" className="shrink-0" onClick={() => { void addWater(u === 'imperial' ? Math.round(custom * 29.5735) : custom); setWaterOpen(false) }}>Add {volumeUnit(u)}</Button></div>
         <WaterList date={date} />
       </Sheet>
       <div className="mt-6 text-center text-[11px] text-ink-400">NutriTrack gives estimates and general guidance, not medical advice.</div>
+    </div>
+  )
+}
+
+function HomeSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-lg px-4 pb-32" style={{ paddingTop: 'calc(var(--safe-t) + 14px)' }}>
+      <Skeleton className="h-4 w-32" />
+      <Skeleton className="mt-2 h-8 w-56" />
+      <Card className="mt-4 flex flex-col items-center py-8"><Skeleton className="h-52 w-52 !rounded-full" /><Skeleton className="mt-5 h-5 w-64" /></Card>
+      <SkeletonCard className="mt-3" lines={3} />
+      <div className="mt-3 grid grid-cols-2 gap-3"><SkeletonCard lines={2} /><SkeletonCard lines={2} /></div>
     </div>
   )
 }
@@ -147,7 +174,7 @@ function WaterList({ date }: { date: string }) {
   const logs = useLiveQuery(async () => alive(await db.water_logs.where('local_date').equals(date).toArray()).sort((a, b) => b.logged_at.localeCompare(a.logged_at)), [date]) ?? []
   if (!logs.length) return null
   return (
-    <div className="mt-4 divide-y divide-ink-100 rounded-2xl bg-white">
+    <div className="mt-4 divide-y divide-ink-100 rounded-2xl bg-surface">
       {logs.map(l => (
         <div key={l.id} className="flex items-center justify-between px-4 py-2.5">
           <span className="num font-semibold">{l.amount_ml} ml</span>

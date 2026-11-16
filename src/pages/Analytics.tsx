@@ -8,12 +8,16 @@ import { api } from '../lib/api'
 import { alive, db, sync } from '../lib/db'
 import { addDays, fmtDate, fmtShort, lastNDays, nowHHMM, today, weekStart } from '../lib/dates'
 import { useDays, usePrefs, useReminders, useTargets } from '../lib/hooks'
-import { Button, Card, Icon, Note, NumInput, Page, SectionTitle, Spinner, fmt } from '../components/ui'
+import { displayToKg, fmtBigVolume, kgToDisplay, unitsOf, weightUnit } from '../lib/units'
+import { renderWeekCard, shareCard } from '../lib/sharecard'
+import { useChartTheme } from '../lib/theme'
+import { Button, Card, Icon, Note, NumInput, Page, SectionTitle, SkeletonCard, Spinner, fmt } from '../components/ui'
 
-const tip = { contentStyle: { borderRadius: 14, border: 'none', boxShadow: '0 8px 24px rgba(17,22,19,.12)', fontSize: 13 }, cursor: { fill: 'rgba(52,165,107,.08)' } }
-const axis = { tick: { fontSize: 11, fill: '#8C958F' }, axisLine: false, tickLine: false } as const
 
 export default function Analytics() {
+  const ct = useChartTheme()
+  const tip = { contentStyle: ct.tooltip, cursor: { fill: ct.cursor } }
+  const axis = { tick: ct.tick, axisLine: false, tickLine: false } as const
   const [offset, setOffset] = useState(0) // weeks back
   const end = addDays(today(), -7 * offset)
   const dates = useMemo(() => lastNDays(end, 7), [end])
@@ -22,14 +26,17 @@ export default function Analytics() {
   const weights = useLiveQuery(async () => alive(await db.weight_logs.toArray()), []) ?? []
   const ws = useMemo(() => weightStats(weights, today(), 30), [weights])
   const todayW = weights.find(w => w.local_date === today())
-  const [kg, setKg] = useState(0)
+  const [wIn, setWIn] = useState(0)
+  const u = unitsOf(prefs)
+  const wu = weightUnit(u)
+  const kg = displayToKg(wIn, u)
   const workouts = useLiveQuery(async () => alive(await db.workouts.where('local_date').between(addDays(end, -13), end, true, true).toArray()), [end]) ?? []
   const chart = stats.days.map(d => ({ ...d, day: fmtShort(d.date), water_l: d.water_ml / 1000, kcalShown: d.hasData ? d.kcal : null, proteinShown: d.hasData ? d.protein_g : null }))
   const wkStart = weekStart(end)
 
   return (
     <Page title="Analytics">
-      <div className="mb-3 flex items-center justify-between rounded-2xl bg-white p-1.5 shadow-card">
+      <div className="mb-3 flex items-center justify-between rounded-2xl bg-surface p-1.5 shadow-card">
         <button aria-label="Earlier" className="flex h-10 w-10 items-center justify-center rounded-xl active:bg-ink-100" onClick={() => setOffset(offset + 1)}><Icon name="left" size={20} /></button>
         <div className="text-center font-semibold">{offset === 0 ? 'Last 7 days' : `${fmtDate(dates[0], { day: 'numeric', month: 'short' })} – ${fmtDate(end, { day: 'numeric', month: 'short' })}`}</div>
         <button aria-label="Later" disabled={offset === 0} className="flex h-10 w-10 items-center justify-center rounded-xl active:bg-ink-100 disabled:text-ink-200" onClick={() => setOffset(offset - 1)}><Icon name="right" size={20} /></button>
@@ -46,11 +53,11 @@ export default function Analytics() {
       <Card className="pl-1 pr-3">
         <ResponsiveContainer width="100%" height={190}>
           <BarChart data={chart} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="#EEF1EE" />
+            <CartesianGrid vertical={false} stroke={ct.grid} />
             <XAxis dataKey="day" {...axis} /><YAxis {...axis} width={44} />
             <Tooltip {...tip} formatter={(v) => [`${fmt(Number(v))} kcal`, 'Calories']} />
-            {targets && <ReferenceLine y={targets.kcal} stroke="#268556" strokeDasharray="5 4" label={{ value: 'Target', position: 'insideTopRight', fontSize: 11, fill: '#268556' }} />}
-            <Bar dataKey="kcalShown" fill="#57BD85" radius={[8, 8, 3, 3]} maxBarSize={30} />
+            {targets && <ReferenceLine y={targets.kcal} stroke={ct.leafDeep} strokeDasharray="5 4" label={{ value: 'Target', position: 'insideTopRight', fontSize: 11, fill: ct.leafDeep }} />}
+            <Bar dataKey="kcalShown" fill={ct.leafSoft} radius={[8, 8, 3, 3]} maxBarSize={30} />
           </BarChart>
         </ResponsiveContainer>
       </Card>
@@ -59,11 +66,11 @@ export default function Analytics() {
       <Card className="pl-1 pr-3">
         <ResponsiveContainer width="100%" height={170}>
           <ComposedChart data={chart} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="#EEF1EE" />
+            <CartesianGrid vertical={false} stroke={ct.grid} />
             <XAxis dataKey="day" {...axis} /><YAxis {...axis} width={44} />
             <Tooltip {...tip} formatter={(v) => [`${fmt(Number(v))} g`, 'Protein']} />
-            {targets && <ReferenceLine y={targets.protein_g} stroke="#268556" strokeDasharray="5 4" />}
-            <Line dataKey="proteinShown" stroke="#268556" strokeWidth={3} dot={{ r: 4, fill: '#268556' }} connectNulls />
+            {targets && <ReferenceLine y={targets.protein_g} stroke={ct.leafDeep} strokeDasharray="5 4" />}
+            <Line dataKey="proteinShown" stroke={ct.leafDeep} strokeWidth={3} dot={{ r: 4, fill: ct.leafDeep }} connectNulls />
           </ComposedChart>
         </ResponsiveContainer>
       </Card>
@@ -72,11 +79,11 @@ export default function Analytics() {
       <Card className="pl-1 pr-3">
         <ResponsiveContainer width="100%" height={150}>
           <BarChart data={chart} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="#EEF1EE" />
+            <CartesianGrid vertical={false} stroke={ct.grid} />
             <XAxis dataKey="day" {...axis} /><YAxis {...axis} width={44} />
-            <Tooltip {...tip} formatter={(v) => [`${fmt(Number(v), 2)} L`, 'Water']} />
-            {targets && <ReferenceLine y={targets.water_ml / 1000} stroke="#0EA5E9" strokeDasharray="5 4" />}
-            <Bar dataKey="water_l" fill="#7DD3FC" radius={[8, 8, 3, 3]} maxBarSize={30} />
+            <Tooltip {...tip} formatter={(v) => [fmtBigVolume(Number(v) * 1000, u), 'Water']} />
+            {targets && <ReferenceLine y={targets.water_ml / 1000} stroke={ct.skyDeep} strokeDasharray="5 4" />}
+            <Bar dataKey="water_l" fill={ct.sky} radius={[8, 8, 3, 3]} maxBarSize={30} />
           </BarChart>
         </ResponsiveContainer>
       </Card>
@@ -89,26 +96,28 @@ export default function Analytics() {
         <Card><div className="text-[13px] font-medium text-ink-500">Least consistent day</div><div className="mt-1 text-lg font-bold">{stats.leastConsistent ? fmtDate(stats.leastConsistent.date, { weekday: 'long' }) : '–'}</div>{stats.leastConsistent && <div className="text-xs text-ink-400">{stats.leastConsistent.logged} of {stats.leastConsistent.expected} meals logged</div>}</Card>
       </div>
 
+      <ShareWeek dates={dates} stats={stats} targets={targets} ws={ws} u={u} wu={wu} />
+
       <SectionTitle>Weight</SectionTitle>
       <Card>
         <div className="flex items-end gap-3">
-          <div className="flex-1"><div className="mb-1 text-[13px] font-medium text-ink-500">{todayW ? `Today: ${fmt(todayW.weight_kg, 1)} kg. Update:` : "Today's weight (kg)"}</div><NumInput value={kg || NaN} onChange={setKg} step={0.1} placeholder="e.g. 92.4" /></div>
-          <Button size="lg" disabled={!(kg >= 20 && kg <= 400)} onClick={async () => { await setWeight(kg); setKg(0) }}>Save</Button>
+          <div className="flex-1"><div className="mb-1 text-[13px] font-medium text-ink-500">{todayW ? `Today: ${fmt(kgToDisplay(todayW.weight_kg, u), 1)} ${wu}. Update:` : `Today's weight (${wu})`}</div><NumInput value={wIn || NaN} onChange={setWIn} step={0.1} placeholder={u === 'imperial' ? 'e.g. 204.0' : 'e.g. 92.4'} /></div>
+          <Button size="lg" disabled={!(kg >= 20 && kg <= 400)} onClick={async () => { await setWeight(kg); setWIn(0) }}>Save</Button>
         </div>
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-2xl bg-ink-50 py-2"><div className="num text-lg font-bold">{ws.latest != null ? fmt(ws.latest, 1) : '–'}</div><div className="text-xs text-ink-500">Latest kg</div></div>
-          <div className="rounded-2xl bg-ink-50 py-2"><div className="num text-lg font-bold">{ws.weeklyChange != null ? `${ws.weeklyChange > 0 ? '+' : ''}${fmt(ws.weeklyChange, 1)}` : '–'}</div><div className="text-xs text-ink-500">Weekly change</div></div>
-          <div className="rounded-2xl bg-ink-50 py-2"><div className="num text-lg font-bold">{ws.overall != null ? `${ws.overall > 0 ? '+' : ''}${fmt(ws.overall, 1)}` : '–'}</div><div className="text-xs text-ink-500">Overall</div></div>
+          <div className="rounded-2xl bg-ink-50 py-2"><div className="num text-lg font-bold">{ws.latest != null ? fmt(kgToDisplay(ws.latest, u), 1) : '–'}</div><div className="text-xs text-ink-500">Latest {wu}</div></div>
+          <div className="rounded-2xl bg-ink-50 py-2"><div className="num text-lg font-bold">{ws.weeklyChange != null ? `${ws.weeklyChange > 0 ? '+' : ''}${fmt(kgToDisplay(ws.weeklyChange, u), 1)}` : '–'}</div><div className="text-xs text-ink-500">Weekly change</div></div>
+          <div className="rounded-2xl bg-ink-50 py-2"><div className="num text-lg font-bold">{ws.overall != null ? `${ws.overall > 0 ? '+' : ''}${fmt(kgToDisplay(ws.overall, u), 1)}` : '–'}</div><div className="text-xs text-ink-500">Overall</div></div>
         </div>
         {ws.entries > 1 && (
           <div className="-ml-3 mt-3">
             <ResponsiveContainer width="100%" height={190}>
-              <ComposedChart data={ws.series.map(p => ({ ...p, label: fmtDate(p.date, { day: 'numeric', month: 'short' }) }))} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#EEF1EE" />
+              <ComposedChart data={ws.series.map(p => ({ label: fmtDate(p.date, { day: 'numeric', month: 'short' }), kg: p.kg == null ? null : kgToDisplay(p.kg, u), avg7: p.avg7 == null ? null : kgToDisplay(p.avg7, u) }))} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke={ct.grid} />
                 <XAxis dataKey="label" {...axis} interval={6} /><YAxis {...axis} width={44} domain={['dataMin - 1', 'dataMax + 1']} tickFormatter={v => fmt(Number(v), 0)} />
-                <Tooltip {...tip} formatter={(v, n) => [`${fmt(Number(v), 1)} kg`, n === 'avg7' ? '7-day average' : 'Daily']} />
-                <Scatter dataKey="kg" fill="#B7BEB9" />
-                <Line dataKey="avg7" stroke="#268556" strokeWidth={3} dot={false} connectNulls />
+                <Tooltip {...tip} formatter={(v, n) => [`${fmt(Number(v), 1)} ${wu}`, n === 'avg7' ? '7-day average' : 'Daily']} />
+                <Scatter dataKey="kg" fill={ct.muted} />
+                <Line dataKey="avg7" stroke={ct.leafDeep} strokeWidth={3} dot={false} connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -124,7 +133,7 @@ export default function Analytics() {
       </>}
 
       <SectionTitle>Daily reports</SectionTitle>
-      <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-white shadow-card">
+      <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-surface shadow-card">
         {[...stats.days].reverse().filter(d => d.date <= today()).map(d => (
           <Link key={d.date} to={`/report/${d.date}`} className="flex items-center justify-between px-4 py-3 active:bg-ink-50">
             <span className="font-medium">{fmtDate(d.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
@@ -133,6 +142,36 @@ export default function Analytics() {
         ))}
       </div>
     </Page>
+  )
+}
+
+function ShareWeek({ dates, stats, targets, ws, u, wu }: { dates: string[]; stats: any; targets: any; ws: any; u: any; wu: string }) {
+  const [busy, setBusy] = useState(false), [msg, setMsg] = useState('')
+  async function go() {
+    setBusy(true); setMsg('')
+    try {
+      const blob = await renderWeekCard({
+        from: dates[0], to: dates[dates.length - 1], daysLogged: stats.daysWithData,
+        avgKcal: stats.avg.kcal, targetKcal: targets?.kcal ?? 0, avgProtein: stats.avg.protein_g, targetProtein: targets?.protein_g ?? 0,
+        consistency: stats.mealConsistency, weightChangeKg: ws.weeklyChange, weightUnit: wu,
+        weightChangeDisplay: ws.weeklyChange == null ? null : kgToDisplay(ws.weeklyChange, u),
+        dailyKcal: stats.days.map((d: any) => (d.hasData ? d.kcal : null)), dayLabels: stats.days.map((d: any) => fmtShort(d.date).slice(0, 1)),
+      })
+      setMsg((await shareCard(blob)) === 'downloaded' ? 'Saved to your downloads.' : '')
+    } catch (e: any) { setMsg(e?.message ?? 'Could not create the image') } finally { setBusy(false) }
+  }
+  return (
+    <>
+      <SectionTitle>Share</SectionTitle>
+      <Card>
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-700"><Icon name="image" size={22} /></div>
+          <div className="min-w-0 flex-1"><div className="font-semibold">Weekly summary image</div><div className="text-sm text-ink-500">Your week as one picture, for sharing or keeping.</div></div>
+        </div>
+        <Button variant="soft" block className="mt-3" disabled={busy} onClick={go}>{busy ? <Spinner /> : <Icon name="send" size={18} />}Create image</Button>
+        {msg && <p className="mt-2 text-center text-sm text-ink-500">{msg}</p>}
+      </Card>
+    </>
   )
 }
 

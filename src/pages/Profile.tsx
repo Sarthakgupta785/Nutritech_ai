@@ -6,14 +6,17 @@ import { db, newId, patch, put, remove, SYNC_TABLES, sync } from '../lib/db'
 import { useProfile, usePrefs, useReminders, useSyncState, useTargets } from '../lib/hooks'
 import { ACTIVITY } from '../lib/nutrition'
 import { disablePush, enablePush, isIOS, pushStatus, type PushStatus } from '../lib/push'
+import { useTheme } from '../lib/theme'
+import { displayToKg, kgToDisplay, unitsOf, weightUnit } from '../lib/units'
 import { supabase } from '../lib/supabase'
 import { SLOT_LABEL, SLOTS, WEEKDAYS } from '../lib/actions'
 import type { Profile as P, Reminder, Slot } from '../lib/types'
-import { Button, Card, Field, Icon, Input, Note, NumInput, Page, SectionTitle, Segmented, Sheet, Toggle, inputCls } from '../components/ui'
+import { Button, Card, Field, Icon, Input, Note, NumInput, Page, SectionTitle, Segmented, Sheet, Toggle, fmt, inputCls } from '../components/ui'
 
 export default function Profile() {
   const profile = useProfile(), targets = useTargets(), prefs = usePrefs(), reminders = useReminders(), sy = useSyncState()
   const { hash } = useLocation()
+  const { theme, set: setThemeValue } = useTheme()
   const [sheet, setSheet] = useState<'profile' | 'targets' | 'prefs' | 'reminder' | null>(null)
   const [editing, setEditing] = useState<Reminder | null>(null)
   useEffect(() => { if (hash) setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth' }), 50) }, [hash])
@@ -30,19 +33,22 @@ export default function Profile() {
   )
   return (
     <Page title="Profile">
-      <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-white shadow-card">
-        <RowBtn label="Personal details" value={`${profile.weight_kg} kg · ${profile.height_cm} cm · ${profile.age} y`} onClick={() => setSheet('profile')} />
+      <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-surface shadow-card">
+        <RowBtn label="Personal details" value={`${fmt(kgToDisplay(profile.weight_kg, unitsOf(prefs)), 1)} ${weightUnit(unitsOf(prefs))} · ${profile.height_cm} cm · ${profile.age} y`} onClick={() => setSheet('profile')} />
         <RowBtn label="Daily targets" value={`${targets.kcal} kcal · ${targets.protein_g} g protein`} onClick={() => setSheet('targets')} />
         <RowBtn label="Food preferences" value={`Avoid: ${prefs.avoid.join(', ') || 'none'}`} onClick={() => setSheet('prefs')} />
       </div>
 
       <div id="reminders" />
       <SectionTitle right={<button className="text-sm font-semibold text-leaf-700" onClick={() => { setEditing(null); setSheet('reminder') }}>Add</button>}>Reminders</SectionTitle>
-      <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-white shadow-card">
+      <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-surface shadow-card">
         {reminders.map(r => (
-          <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
-            <input aria-label={`${r.label} time`} type="time" value={r.time} onChange={e => e.target.value && patch('reminders', r.id, { time: e.target.value })} className="num h-10 w-[104px] rounded-xl bg-ink-50 px-2 font-semibold outline-none" />
-            <button className="min-w-0 flex-1 truncate text-left font-medium" onClick={() => { setEditing(r); setSheet('reminder') }}>{r.label}{r.weekday != null && <span className="ml-1.5 text-[12px] font-normal text-ink-400">{WEEKDAYS[r.weekday].slice(0, 3)} only</span>}</button>
+          <div key={r.id} className="flex items-center gap-2.5 px-3 py-2.5">
+            <input aria-label={`${r.label} time`} type="time" value={r.time} onChange={e => e.target.value && patch('reminders', r.id, { time: e.target.value })} className="num h-10 w-[122px] shrink-0 rounded-xl bg-ink-50 px-1.5 font-semibold outline-none" />
+            <button className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left" onClick={() => { setEditing(r); setSheet('reminder') }}>
+              <span className="truncate font-medium">{r.label}</span>
+              {r.weekday != null && <span className="shrink-0 text-[12px] font-normal text-ink-400">{WEEKDAYS[r.weekday].slice(0, 3)}</span>}
+            </button>
             <Toggle on={r.enabled} onChange={v => patch('reminders', r.id, { enabled: v })} label={`Enable ${r.label}`} />
           </div>
         ))}
@@ -51,6 +57,20 @@ export default function Profile() {
 
       <SectionTitle>Notifications</SectionTitle>
       <Notifications />
+
+      <SectionTitle>Appearance and units</SectionTitle>
+      <Card className="space-y-4">
+        <div>
+          <div className="mb-1.5 text-[13px] font-medium text-ink-500">Theme</div>
+          <Segmented value={theme} onChange={setThemeValue} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />
+        </div>
+        <div>
+          <div className="mb-1.5 text-[13px] font-medium text-ink-500">Measurements</div>
+          <Segmented value={prefs.units ?? 'metric'} onChange={v => patch('user_preferences', prefs.id, { units: v })}
+            options={[{ value: 'metric', label: 'kg · ml' }, { value: 'imperial', label: 'lb · fl oz' }]} />
+          <p className="mt-1.5 text-xs text-ink-400">Changes how weight and water are shown and entered. Food is always counted in grams, as printed on labels.</p>
+        </div>
+      </Card>
 
       <SectionTitle>Optional features</SectionTitle>
       <Card className="flex items-center justify-between">
@@ -78,6 +98,7 @@ export default function Profile() {
 }
 
 function ProfileForm({ p, onDone }: { p: P; onDone: () => void }) {
+  const u = unitsOf(usePrefs())
   const [d, setD] = useState({ name: p.name, sex: p.sex, age: p.age, height_cm: p.height_cm, weight_kg: p.weight_kg, activity: p.activity })
   return (
     <div className="space-y-3">
@@ -86,7 +107,7 @@ function ProfileForm({ p, onDone }: { p: P; onDone: () => void }) {
       <div className="grid grid-cols-3 gap-3">
         <Field label="Age"><NumInput value={d.age} onChange={age => setD({ ...d, age })} /></Field>
         <Field label="Height (cm)"><NumInput value={d.height_cm} onChange={height_cm => setD({ ...d, height_cm })} /></Field>
-        <Field label="Weight (kg)"><NumInput value={d.weight_kg} onChange={weight_kg => setD({ ...d, weight_kg })} /></Field>
+        <Field label={`Weight (${weightUnit(u)})`}><NumInput value={Number(kgToDisplay(d.weight_kg, u).toFixed(1))} onChange={v => setD({ ...d, weight_kg: displayToKg(v, u) })} /></Field>
       </div>
       <Field label="Activity"><select className={inputCls} value={d.activity} onChange={e => setD({ ...d, activity: e.target.value as P['activity'] })}>{Object.entries(ACTIVITY).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></Field>
       <Note>Changing these does not change your targets automatically. Open Daily targets afterwards to review the new estimate.</Note>

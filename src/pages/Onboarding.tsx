@@ -21,7 +21,7 @@ export default function Onboarding() {
   async function finish(t: TargetValues) {
     const id = getUid()
     await put('nutrition_targets', { id, ...t })
-    await put('user_preferences', { id, diet: 'Non-vegetarian', preferred: list(preferred), avoid: list(avoid), whey_max_scoops: whey, workouts_enabled: true, fitness_level: 'beginner' })
+    await put('user_preferences', { id, diet: 'Non-vegetarian', preferred: list(preferred), avoid: list(avoid), whey_max_scoops: whey, workouts_enabled: true, fitness_level: 'beginner', units: 'metric' })
     for (const r of DEFAULT_REMINDERS) await put('reminders', { ...r, id: newId() })
     await setWeight(p.weight_kg)
     await put('profiles', { id, ...p, goal: 'Fat loss while preserving muscle', timezone: deviceTz(), onboarded: true })

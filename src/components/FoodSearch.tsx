@@ -51,7 +51,7 @@ export default function FoodSearch({ open, onClose, onAdd, onScanLabel }: { open
       <Segmented value={tab} onChange={setTab} options={[{ value: 'all', label: 'All' }, { value: 'recent', label: 'Recent' }, { value: 'meals', label: 'Favourites' }, { value: 'custom', label: 'Custom' }]} />
 
       {tab !== 'meals' && (
-        <div className="mt-3 divide-y divide-ink-100 overflow-hidden rounded-2xl bg-white">
+        <div className="mt-3 divide-y divide-ink-100 overflow-hidden rounded-2xl bg-surface">
           {list.slice(0, 60).map(h => <Row key={h.key} h={h} avoid={matchesAvoid(h.name, prefs?.avoid ?? [])} onAdd={() => add(h)} />)}
           {!list.length && <div className="p-4 text-sm text-ink-500">{tab === 'recent' ? 'Foods you log will appear here.' : tab === 'custom' ? 'No custom foods yet.' : 'No match in the built-in list.'}</div>}
         </div>
@@ -59,7 +59,7 @@ export default function FoodSearch({ open, onClose, onAdd, onScanLabel }: { open
       {tab === 'meals' && (
         <div className="mt-3 space-y-2">
           {favs.map(f => (
-            <div key={f.id} className="flex items-center gap-3 rounded-2xl bg-white p-3">
+            <div key={f.id} className="flex items-center gap-3 rounded-2xl bg-surface p-3">
               <button className="flex-1 text-left" onClick={() => { onAdd(f.items); onClose() }}>
                 <div className="font-semibold">{f.name}</div>
                 <div className="text-sm text-ink-500">{f.items.length} items · {fmt(f.items.reduce((n, i) => n + i.kcal, 0))} kcal</div>
@@ -67,7 +67,7 @@ export default function FoodSearch({ open, onClose, onAdd, onScanLabel }: { open
               <button aria-label="Delete favourite" className="p-2 text-ink-400" onClick={() => remove('favourite_meals', f.id)}><Icon name="trash" size={18} /></button>
             </div>
           ))}
-          {!favs.length && <div className="rounded-2xl bg-white p-4 text-sm text-ink-500">Open any logged meal and tap "Save as favourite" to reuse it here.</div>}
+          {!favs.length && <div className="rounded-2xl bg-surface p-4 text-sm text-ink-500">Open any logged meal and tap "Save as favourite" to reuse it here.</div>}
         </div>
       )}
 
@@ -76,7 +76,7 @@ export default function FoodSearch({ open, onClose, onAdd, onScanLabel }: { open
           {usda === null ? <Button variant="outline" block onClick={searchUsda} disabled={busy}>{busy ? <Spinner /> : <Icon name="search" size={16} />}Search USDA database online</Button> : (
             <>
               <div className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-ink-500">USDA FoodData Central</div>
-              <div className="divide-y divide-ink-100 overflow-hidden rounded-2xl bg-white">
+              <div className="divide-y divide-ink-100 overflow-hidden rounded-2xl bg-surface">
                 {usda.map(h => <Row key={h.key} h={h} avoid={matchesAvoid(h.name, prefs?.avoid ?? [])} onAdd={() => add(h)} />)}
                 {!usda.length && <div className="p-4 text-sm text-ink-500">No results.</div>}
               </div>

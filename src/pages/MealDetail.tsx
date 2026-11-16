@@ -47,7 +47,7 @@ export default function MealDetail() {
       </Card>
 
       <SectionTitle>Confirmed foods</SectionTitle>
-      <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-white shadow-card">
+      <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-surface shadow-card">
         {items.map(i => (
           <div key={i.id} className="px-4 py-3">
             <div className="flex items-baseline justify-between gap-3"><span className="font-semibold">{i.name}</span><span className="num shrink-0 font-semibold">{fmt(i.kcal)} kcal</span></div>

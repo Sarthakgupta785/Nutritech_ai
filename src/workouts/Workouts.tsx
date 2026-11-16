@@ -72,7 +72,7 @@ export default function Workouts() {
 
       <SectionTitle>History</SectionTitle>
       {all.length ? (
-        <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-white shadow-card">
+        <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl bg-surface shadow-card">
           {all.slice(0, 20).map(w => (
             <button key={w.id} onClick={() => setDetail(w)} className="flex w-full items-center justify-between px-4 py-3 text-left active:bg-ink-50">
               <div><div className="font-medium">{w.category || 'Workout'}</div><div className="text-sm text-ink-500">{fmtDate(w.local_date, { weekday: 'short', day: 'numeric', month: 'short' })} · {fmt(w.duration_min)} min · ~{fmt(w.est_kcal)} kcal est.</div></div>

@@ -122,7 +122,7 @@ export default function Session() {
         <div className="flex flex-1 flex-col items-center justify-center text-center">
           <div className="text-[13px] font-semibold uppercase tracking-wide text-ink-500">Rest</div>
           <div className="num text-[96px] font-bold leading-none text-leaf-600">{left}</div>
-          {nextBlock && <div className="mt-6 w-full rounded-3xl bg-white p-4 shadow-card"><div className="text-[13px] font-semibold text-ink-500">Next</div><div className="text-lg font-bold">{EX_BY_ID[nextBlock.id].name}</div><div className="num text-sm text-ink-500">{nextBlock === block ? `Set ${si + 2} of ${block!.sets}` : `${nextBlock.sets} × ${nextBlock.target}${nextBlock.unit === 'sec' ? ' sec' : ' reps'}`}</div></div>}
+          {nextBlock && <div className="mt-6 w-full rounded-3xl bg-surface p-4 shadow-card"><div className="text-[13px] font-semibold text-ink-500">Next</div><div className="text-lg font-bold">{EX_BY_ID[nextBlock.id].name}</div><div className="num text-sm text-ink-500">{nextBlock === block ? `Set ${si + 2} of ${block!.sets}` : `${nextBlock.sets} × ${nextBlock.target}${nextBlock.unit === 'sec' ? ' sec' : ' reps'}`}</div></div>}
           <div className="mt-6 grid w-full grid-cols-2 gap-3"><Button variant="outline" size="lg" onClick={togglePause}><Icon name={paused ? 'play' : 'pause'} size={18} />{paused ? 'Resume' : 'Pause'}</Button><Button size="lg" onClick={next}>Skip rest</Button></div>
         </div>
       ) : ex && block && (

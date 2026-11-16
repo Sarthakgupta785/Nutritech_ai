@@ -11,7 +11,7 @@ export interface Profile extends Base {
 }
 export interface Targets extends Base, Macros { water_ml: number; professional_approved: boolean }
 export interface Prefs extends Base {
-  diet: string; preferred: string[]; avoid: string[]; whey_max_scoops: number; workouts_enabled: boolean; fitness_level: 'beginner' | 'intermediate'
+  diet: string; preferred: string[]; avoid: string[]; whey_max_scoops: number; workouts_enabled: boolean; fitness_level: 'beginner' | 'intermediate'; units: 'metric' | 'imperial'
 }
 export interface Food extends Base, Macros { name: string; unit: Unit; servings: [string, number][]; source: Source }
 export interface FavouriteMeal extends Base { name: string; items: ItemDraft[] }

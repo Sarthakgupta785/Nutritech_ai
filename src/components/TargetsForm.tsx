@@ -19,7 +19,7 @@ export default function TargetsForm({ profile, initial, onSave, saveLabel = 'Sav
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-white p-4 shadow-card">
+      <div className="rounded-3xl bg-surface p-4 shadow-card">
         <div className="grid grid-cols-3 gap-2 text-center">
           <div><div className="num text-xl font-bold">{s.bmr}</div><div className="text-xs text-ink-500">Resting kcal</div></div>
           <div><div className="num text-xl font-bold">{s.tdee}</div><div className="text-xs text-ink-500">Maintenance</div></div>
@@ -41,7 +41,7 @@ export default function TargetsForm({ profile, initial, onSave, saveLabel = 'Sav
 
       {check.level !== 'ok' && <Note tone={check.level === 'danger' ? 'danger' : 'warn'}>{check.message}</Note>}
       {mismatch && <Note tone="warn">Your macros add up to about {Math.round(macroKcal)} kcal, which does not match the {t.kcal} kcal target. Adjust one of them so the day is achievable.</Note>}
-      <label className="flex items-start gap-3 rounded-2xl bg-white p-3 shadow-card">
+      <label className="flex items-start gap-3 rounded-2xl bg-surface p-3 shadow-card">
         <input type="checkbox" className="mt-1 h-5 w-5 accent-leaf-600" checked={t.professional_approved} onChange={e => setT({ ...t, professional_approved: e.target.checked })} />
         <span className="text-[14px] leading-5 text-ink-700">These targets were set or approved by a doctor or registered dietitian.{check.level === 'danger' && <b className="block text-red-700">Required to save a target this low.</b>}</span>
       </label>

@@ -1,5 +1,6 @@
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { cssColor, useChartTheme } from '../lib/theme'
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
 export { cx }
@@ -37,18 +38,20 @@ export function Icon({ name, size = 22, className, fill }: { name: keyof typeof 
 }
 
 export const Card = ({ children, className, onClick }: { children: ReactNode; className?: string; onClick?: () => void }) => (
-  <div onClick={onClick} className={cx('rounded-3xl p-4 shadow-card', !/(^|\s)!?bg-/.test(className ?? '') && 'bg-white', onClick && 'cursor-pointer active:scale-[.99] transition-transform', className)}>{children}</div>
+  <div onClick={onClick} className={cx('rounded-3xl p-4 shadow-card', !/(^|\s)!?bg-/.test(className ?? '') && 'bg-surface', onClick && 'cursor-pointer active:scale-[.99] transition-transform', className)}>{children}</div>
 )
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'soft' | 'ghost' | 'danger' | 'outline'; size?: 'sm' | 'md' | 'lg'; block?: boolean }
 export function Button({ variant = 'primary', size = 'md', block, className, children, ...rest }: BtnProps) {
   const v = { primary: 'bg-leaf-600 text-white active:bg-leaf-700 disabled:bg-ink-200 disabled:text-ink-400', soft: 'bg-leaf-50 text-leaf-800 active:bg-leaf-100', ghost: 'text-ink-700 active:bg-ink-100',
-    danger: 'bg-red-50 text-red-700 active:bg-red-100', outline: 'border border-ink-200 bg-white text-ink-900 active:bg-ink-50' }[variant]
+    danger: 'bg-red-50 text-red-700 active:bg-red-100', outline: 'border border-ink-200 bg-surface text-ink-900 active:bg-ink-50' }[variant]
   const s = { sm: 'h-9 px-3 text-sm rounded-xl', md: 'h-11 px-4 text-[15px] rounded-2xl', lg: 'h-14 px-5 text-[17px] rounded-2xl' }[size]
   return <button {...rest} className={cx('inline-flex items-center justify-center gap-2 font-semibold transition-colors select-none disabled:cursor-not-allowed', v, s, block && 'w-full', className)}>{children}</button>
 }
 
-export function Ring({ value, max, size = 180, stroke = 14, color = '#34A56B', track = '#E6EFE9', children }: { value: number; max: number; size?: number; stroke?: number; color?: string; track?: string; children?: ReactNode }) {
+export function Ring({ value, max, size = 180, stroke = 14, color, track, children }: { value: number; max: number; size?: number; stroke?: number; color?: string; track?: string; children?: ReactNode }) {
+  const t = useChartTheme()
+  color = color ?? t.leaf; track = track ?? cssColor('--leaf-100')
   const r = (size - stroke) / 2, c = 2 * Math.PI * r
   const frac = max > 0 ? Math.min(value / max, 1) : 0
   const over = max > 0 && value > max
@@ -56,7 +59,7 @@ export function Ring({ value, max, size = 180, stroke = 14, color = '#34A56B', t
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={over ? '#E08A2B' : color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - frac)} style={{ transition: 'stroke-dashoffset .5s ease' }} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={over ? t.amber : color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - frac)} style={{ transition: 'stroke-dashoffset .5s ease' }} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
     </div>
@@ -89,7 +92,7 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
   return (
     <div className="flex rounded-2xl bg-ink-100 p-1">
       {options.map(o => (
-        <button key={o.value} onClick={() => onChange(o.value)} className={cx('h-9 flex-1 rounded-xl text-sm font-semibold transition-colors', value === o.value ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500')}>{o.label}</button>
+        <button key={o.value} onClick={() => onChange(o.value)} className={cx('h-9 flex-1 rounded-xl text-sm font-semibold transition-colors', value === o.value ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500')}>{o.label}</button>
       ))}
     </div>
   )
@@ -97,14 +100,14 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={cx('relative h-8 w-[52px] shrink-0 rounded-full transition-colors', on ? 'bg-leaf-500' : 'bg-ink-200')}>
-      <span className={cx('absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all', on ? 'left-[24px]' : 'left-1')} />
+      <span className={cx('absolute top-1 h-6 w-6 rounded-full bg-surface shadow transition-all', on ? 'left-[24px]' : 'left-1')} />
     </button>
   )
 }
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return <label className="block"><span className="mb-1 block text-[13px] font-medium text-ink-500">{label}</span>{children}{hint && <span className="mt-1 block text-xs text-ink-400">{hint}</span>}</label>
 }
-export const inputCls = 'h-12 w-full rounded-2xl border border-ink-200 bg-white px-4 text-ink-900 outline-none focus:border-leaf-500 focus:ring-2 focus:ring-leaf-100'
+export const inputCls = 'h-12 w-full rounded-2xl border border-ink-200 bg-surface px-4 text-ink-900 outline-none focus:border-leaf-500 focus:ring-2 focus:ring-leaf-100'
 export const Input = (p: InputHTMLAttributes<HTMLInputElement>) => <input {...p} className={cx(inputCls, p.className)} />
 export function NumInput({ value, onChange, className, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & { value: number; onChange: (n: number) => void }) {
   return <input {...rest} type="number" inputMode="decimal" value={Number.isFinite(value) ? value : ''} onChange={e => onChange(e.target.value === '' ? 0 : Number(e.target.value))} onFocus={e => e.target.select()} className={cx(inputCls, className)} />
@@ -118,7 +121,7 @@ export function Page({ title, back, right, children, subtitle }: { title?: strin
     <div className="mx-auto min-h-full w-full max-w-lg px-4 pb-32" style={{ paddingTop: 'calc(var(--safe-t) + 14px)' }}>
       {(title || back) && (
         <header className="mb-4 flex items-center gap-2">
-          {back && <button aria-label="Back" onClick={() => (typeof back === 'string' ? nav(back) : nav(-1))} className="-ml-1 flex h-10 w-10 items-center justify-center rounded-full bg-white text-ink-700 shadow-card"><Icon name="left" size={20} /></button>}
+          {back && <button aria-label="Back" onClick={() => (typeof back === 'string' ? nav(back) : nav(-1))} className="-ml-1 flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink-700 shadow-card"><Icon name="left" size={20} /></button>}
           <div className="min-w-0 flex-1">
             {subtitle && <div className="text-[13px] font-medium text-ink-500">{subtitle}</div>}
             <h1 className={cx('truncate font-bold tracking-tight', back ? 'text-2xl' : 'text-[32px] leading-9')}>{title}</h1>
@@ -138,4 +141,13 @@ export const Note = ({ children, tone = 'info' }: { children: ReactNode; tone?: 
     <Icon name={tone === 'info' ? 'info' : 'warn'} size={18} className="mt-px shrink-0" /><div>{children}</div>
   </div>
 )
+export const Skeleton = ({ className }: { className?: string }) => <div className={cx('skeleton', className)} aria-hidden />
+export function SkeletonCard({ lines = 3, className }: { lines?: number; className?: string }) {
+  return (
+    <div className={cx('rounded-3xl bg-surface p-4 shadow-card', className)}>
+      <Skeleton className="h-4 w-1/3" />
+      {Array.from({ length: lines }).map((_, i) => <Skeleton key={i} className={cx('mt-3 h-3', i === lines - 1 ? 'w-2/3' : 'w-full')} />)}
+    </div>
+  )
+}
 export const fmt = (n: number, d = 0) => (Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: 0 }) : '0')

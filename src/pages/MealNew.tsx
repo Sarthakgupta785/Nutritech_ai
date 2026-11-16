@@ -29,8 +29,8 @@ export default function MealNew() {
     nav(`/meal/${id}/edit?${mode}=1`, { replace: true })
   }
   const Option = ({ icon, title, sub, onClick, quiet }: { icon: string; title: string; sub: string; onClick: () => void; quiet?: boolean }) => (
-    <button onClick={onClick} disabled={busy} className={`flex w-full items-center gap-4 rounded-3xl p-5 text-left shadow-card active:scale-[.99] ${quiet ? 'bg-white' : 'bg-leaf-600 text-white'}`}>
-      <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${quiet ? 'bg-ink-100 text-ink-700' : 'bg-white/20'}`}><Icon name={icon} size={28} /></div>
+    <button onClick={onClick} disabled={busy} className={`flex w-full items-center gap-4 rounded-3xl p-5 text-left shadow-card active:scale-[.99] ${quiet ? 'bg-surface' : 'bg-leaf-600 text-white'}`}>
+      <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${quiet ? 'bg-ink-100 text-ink-700' : 'bg-surface/20'}`}><Icon name={icon} size={28} /></div>
       <div><div className="text-[19px] font-bold">{title}</div><div className={`text-sm ${quiet ? 'text-ink-500' : 'text-white/85'}`}>{sub}</div></div>
     </button>
   )

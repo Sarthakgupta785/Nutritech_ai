@@ -23,7 +23,7 @@ export default function ExerciseDetail() {
       <SectionTitle>Movement stages</SectionTitle>
       <div className={`grid gap-2 ${n > 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
         {e.frames.map((_, i) => (
-          <div key={i} className="rounded-2xl bg-white p-2 shadow-card">
+          <div key={i} className="rounded-2xl bg-surface p-2 shadow-card">
             <Still ex={e} frame={i} arrowTo={e.loop === 'cycle' ? (i + 1) % n : i + 1 < n ? i + 1 : i - 1} className="aspect-[11/10] w-full rounded-xl bg-ink-50" />
             <div className="mt-1.5 px-1 text-[13px] font-medium leading-4 text-ink-700"><span className="text-leaf-700">{i + 1}.</span> {e.stages[i]}</div>
           </div>

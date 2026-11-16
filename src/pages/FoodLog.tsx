@@ -6,7 +6,7 @@ import { remove } from '../lib/db'
 import { addDays, fmtDate, fmtHHMM, fmtTime, today } from '../lib/dates'
 import { mealSlots, useDay, useReminders, useTargets, type DayData } from '../lib/hooks'
 import type { Slot } from '../lib/types'
-import { Badge, Button, Card, Icon, Page, Segmented, fmt } from '../components/ui'
+import { Badge, Button, Card, Icon, Page, Segmented, Skeleton, SkeletonCard, fmt } from '../components/ui'
 
 export default function FoodLog() {
   const nav = useNavigate()
@@ -21,7 +21,7 @@ export default function FoodLog() {
 
   return (
     <Page title="Food Log">
-      <div className="mb-3 flex items-center justify-between rounded-2xl bg-white p-1.5 shadow-card">
+      <div className="mb-3 flex items-center justify-between rounded-2xl bg-surface p-1.5 shadow-card">
         <button aria-label="Previous day" className="flex h-10 w-10 items-center justify-center rounded-xl text-ink-700 active:bg-ink-100" onClick={() => setDate(addDays(date, -1))}><Icon name="left" size={20} /></button>
         <div className="relative text-center">
           <div className="font-semibold">{date === today() ? 'Today' : date === addDays(today(), -1) ? 'Yesterday' : fmtDate(date, { weekday: 'short', day: 'numeric', month: 'short' })}</div>
@@ -38,7 +38,9 @@ export default function FoodLog() {
       </Card>
       <Segmented value={view} onChange={setView} options={[{ value: 'list', label: 'Meals' }, { value: 'photos', label: 'Photo journal' }]} />
 
-      {view === 'list' ? (
+      {!day.loaded ? (
+        <div className="mt-3 space-y-3">{[0, 1, 2].map(i => <SkeletonCard key={i} lines={2} />)}</div>
+      ) : view === 'list' ? (
         <div className="mt-3 space-y-3">
           {slots.map(s => <SlotCard key={s.slot} slot={s.slot} time={s.time} day={day} date={date} />)}
           <Button variant="soft" block onClick={() => nav(`/meal/new?slot=other&date=${date}`)}><Icon name="plus" size={18} />Add another meal</Button>
@@ -87,7 +89,7 @@ function Journal({ day, date }: { day: DayData; date: string }) {
   return (
     <div className="mt-3 grid grid-cols-2 gap-3">
       {meals.map(m => (
-        <button key={m.id} onClick={() => nav(m.status === 'draft' ? `/meal/${m.id}/edit` : `/meal/${m.id}`)} className="overflow-hidden rounded-3xl bg-white text-left shadow-card active:scale-[.99]">
+        <button key={m.id} onClick={() => nav(m.status === 'draft' ? `/meal/${m.id}/edit` : `/meal/${m.id}`)} className="overflow-hidden rounded-3xl bg-surface text-left shadow-card active:scale-[.99]">
           <MealThumb mealId={m.id} hasPhoto={m.hasPhoto} className="aspect-square w-full" />
           <div className="p-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-leaf-700">{SLOT_LABEL[m.slot]}</div>

@@ -2,7 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px); }
+/* One palette, two value sets. Components never name a light or dark colour. */
+:root {
+  color-scheme: light;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --surface: 255 255 255;
+  --shadow-card: 0 1px 2px rgba(17, 22, 19, .04), 0 8px 24px rgba(17, 22, 19, .05);
+
+  --leaf-50: 238 249 242;  --leaf-100: 217 242 227; --leaf-200: 180 229 200; --leaf-300: 134 211 167;
+  --leaf-400: 87 189 133;  --leaf-500: 52 165 107;  --leaf-600: 38 133 86;   --leaf-700: 32 106 70;
+  --leaf-800: 29 84 57;    --leaf-900: 24 69 48;
+
+  --ink-50: 245 247 245;  --ink-100: 238 241 238; --ink-200: 221 226 222; --ink-300: 183 190 185;
+  --ink-400: 140 149 143; --ink-500: 102 112 105; --ink-700: 46 55 49;    --ink-900: 17 22 19;
+
+  --sky-50: 240 249 255;  --sky-100: 224 242 254; --sky-300: 125 211 252; --sky-400: 56 189 248;
+  --sky-600: 2 132 199;   --sky-700: 3 105 161;   --sky-800: 7 89 133;
+  --amber-50: 255 251 235; --amber-100: 254 243 199; --amber-200: 253 230 138; --amber-300: 252 211 77;
+  --amber-400: 251 191 36; --amber-800: 146 64 14;   --amber-900: 120 53 15;
+  --red-50: 254 242 242;  --red-100: 254 226 226; --red-600: 220 38 38; --red-700: 185 28 28; --red-800: 153 27 27;
+  --violet-100: 237 233 254; --violet-400: 167 139 250; --violet-800: 91 33 182;
+}
+
+.dark {
+  color-scheme: dark;
+  --surface: 28 32 30;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .28);
+
+  /* Tints become dark washes; the deep shades become the readable ones. */
+  --leaf-50: 22 39 30;   --leaf-100: 28 51 39;   --leaf-200: 39 72 53;   --leaf-300: 60 107 79;
+  --leaf-400: 79 163 118; --leaf-500: 87 189 133; --leaf-600: 45 155 100; --leaf-700: 134 211 167;
+  --leaf-800: 180 229 200; --leaf-900: 217 242 227;
+
+  --ink-50: 18 21 19;    --ink-100: 34 39 36;   --ink-200: 46 53 49;   --ink-300: 61 70 66;
+  --ink-400: 124 134 129; --ink-500: 154 164 158; --ink-700: 200 208 203; --ink-900: 237 241 238;
+
+  --sky-50: 12 34 48;    --sky-100: 16 48 63;   --sky-300: 125 211 252; --sky-400: 56 189 248;
+  --sky-600: 56 189 248; --sky-700: 125 211 252; --sky-800: 186 230 253;
+  --amber-50: 42 32 8;   --amber-100: 55 41 11; --amber-200: 74 55 18;  --amber-300: 252 211 77;
+  --amber-400: 251 191 36; --amber-800: 252 211 77; --amber-900: 253 230 138;
+  --red-50: 44 22 24;    --red-100: 58 27 30;   --red-600: 248 113 113; --red-700: 252 165 165; --red-800: 254 202 202;
+  --violet-100: 36 28 61; --violet-400: 167 139 250; --violet-800: 221 214 254;
+}
+
 html, body, #root { height: 100%; }
 body { @apply bg-ink-50 text-ink-900 font-sans antialiased; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
 input, select, textarea, button { font: inherit; }
@@ -12,6 +55,13 @@ input, select, textarea { font-size: 16px; } /* prevents iOS zoom on focus */
 .no-scrollbar { scrollbar-width: none; }
 @keyframes sheet-up { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
 @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes shimmer { 100% { transform: translateX(100%) } }
 .sheet-up { animation: sheet-up .22s ease-out; }
 .fade-in { animation: fade-in .18s ease-out; }
-@media (prefers-reduced-motion: reduce) { .sheet-up, .fade-in { animation: none; } }
+.skeleton { @apply relative overflow-hidden rounded-xl bg-ink-100; }
+.skeleton::after {
+  content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--surface) / .55), transparent);
+  animation: shimmer 1.6s infinite;
+}
+@media (prefers-reduced-motion: reduce) { .sheet-up, .fade-in, .skeleton::after { animation: none; } }

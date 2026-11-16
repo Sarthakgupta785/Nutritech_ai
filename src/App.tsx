@@ -5,10 +5,11 @@ import { configured, supabase } from './lib/supabase'
 import { clearLocal, patch, setUid, sync } from './lib/db'
 import { deviceTz } from './lib/dates'
 import { ensureWeighInReminder } from './lib/actions'
-import { refreshSubscription } from './lib/push'
+import { isStandalone, refreshSubscription } from './lib/push'
 import { useProfile, usePrefs } from './lib/hooks'
 import { Icon, Spinner, cx } from './components/ui'
 import Auth from './pages/Auth'
+import Landing from './pages/Landing'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import FoodLog from './pages/FoodLog'
@@ -36,7 +37,7 @@ function TabBar() {
   const { pathname } = useLocation()
   if (HIDE_TABS.test(pathname)) return null
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-100 bg-white/90 backdrop-blur-xl" style={{ paddingBottom: 'var(--safe-b)' }}>
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-100 bg-surface/90 backdrop-blur-xl" style={{ paddingBottom: 'var(--safe-b)' }}>
       <div className="mx-auto flex max-w-lg">
         {TABS.map(t => (
           <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => cx('flex h-[58px] flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] font-semibold', isActive ? 'text-leaf-600' : 'text-ink-400')}>
@@ -120,6 +121,7 @@ export default function App() {
     </div>
   )
   if (session === undefined) return <Splash />
-  if (!session) return <Auth />
+  // Installed app: straight to sign-in. Someone visiting the address in a browser gets the pitch first.
+  if (!session) return isStandalone() ? <Auth /> : <Landing />
   return <Shell key={session.user.id} />
 }

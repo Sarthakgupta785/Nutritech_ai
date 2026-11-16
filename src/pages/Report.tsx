@@ -9,6 +9,7 @@ import { alive, db, sync } from '../lib/db'
 import { fmtDate, fmtHHMM, fmtTime, nowHHMM, today } from '../lib/dates'
 import { mealSlots, slotStatus, useDay, useReminders, useTargets } from '../lib/hooks'
 import { pct } from '../lib/nutrition'
+import { useChartTheme } from '../lib/theme'
 import { Bar, Button, Card, Icon, Note, Page, SectionTitle, Spinner, fmt } from '../components/ui'
 
 const QUESTIONS: [key: keyof import('../lib/types').DailyAi, q: string][] = [
@@ -19,6 +20,7 @@ const QUESTIONS: [key: keyof import('../lib/types').DailyAi, q: string][] = [
 
 export default function Report() {
   const { date = today() } = useParams()
+  const ct = useChartTheme()
   const nav = useNavigate()
   const day = useDay(date), targets = useTargets(), reminders = useReminders()
   const row = useLiveQuery(async () => alive(await db.daily_reports.where('local_date').equals(date).toArray())[0] ?? null, [date])
@@ -44,12 +46,12 @@ export default function Report() {
   const completed = statuses.filter(x => x.s === 'logged').length, skipped = statuses.filter(x => x.s === 'skipped').length
   const unlogged = statuses.filter(x => x.s === 'unlogged' || x.s === 'draft').length
   const macros = [
-    { name: 'Calories', v: t.kcal, max: targets.kcal, unit: 'kcal', fill: '#34A56B', bar: 'bg-leaf-500' },
-    { name: 'Protein', v: t.protein_g, max: targets.protein_g, unit: 'g', fill: '#268556', bar: 'bg-leaf-600' },
-    { name: 'Carbs', v: t.carbs_g, max: targets.carbs_g, unit: 'g', fill: '#38BDF8', bar: 'bg-sky-400' },
-    { name: 'Fat', v: t.fat_g, max: targets.fat_g, unit: 'g', fill: '#FBBF24', bar: 'bg-amber-400' },
-    { name: 'Fibre', v: t.fibre_g, max: targets.fibre_g, unit: 'g', fill: '#A78BFA', bar: 'bg-violet-400' },
-    { name: 'Water', v: day.water / 1000, max: targets.water_ml / 1000, unit: 'L', fill: '#7DD3FC', bar: 'bg-sky-300' },
+    { name: 'Calories', v: t.kcal, max: targets.kcal, unit: 'kcal', fill: ct.leaf, bar: 'bg-leaf-500' },
+    { name: 'Protein', v: t.protein_g, max: targets.protein_g, unit: 'g', fill: ct.leafDeep, bar: 'bg-leaf-600' },
+    { name: 'Carbs', v: t.carbs_g, max: targets.carbs_g, unit: 'g', fill: ct.sky, bar: 'bg-sky-400' },
+    { name: 'Fat', v: t.fat_g, max: targets.fat_g, unit: 'g', fill: ct.amber, bar: 'bg-amber-400' },
+    { name: 'Fibre', v: t.fibre_g, max: targets.fibre_g, unit: 'g', fill: ct.violet, bar: 'bg-violet-400' },
+    { name: 'Water', v: day.water / 1000, max: targets.water_ml / 1000, unit: 'L', fill: ct.sky, bar: 'bg-sky-300' },
   ]
   const radial = macros.slice(0, 4).map(m => ({ name: m.name, value: Math.min(pct(m.v, m.max), 100), fill: m.fill })).reverse()
   const r = row?.report
@@ -64,7 +66,7 @@ export default function Report() {
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart data={radial} innerRadius="38%" outerRadius="100%" startAngle={90} endAngle={-270} barSize={9}>
                 <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-                <RadialBar dataKey="value" cornerRadius={6} background={{ fill: '#EEF1EE' }} />
+                <RadialBar dataKey="value" cornerRadius={6} background={{ fill: ct.track }} />
               </RadialBarChart>
             </ResponsiveContainer>
           </div>
@@ -100,9 +102,9 @@ export default function Report() {
           <Card><p className="text-[19px] font-semibold leading-7">{r.headline}</p></Card>
           <Card className="mt-3 bg-leaf-600 text-white">
             <div className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-white/80">Tomorrow's action plan</div>
-            <ol className="space-y-2.5">{r.action_plan?.map((a, i) => <li key={i} className="flex gap-3"><span className="num flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20 text-sm font-bold">{i + 1}</span><span className="text-[16px] leading-6">{a}</span></li>)}</ol>
+            <ol className="space-y-2.5">{r.action_plan?.map((a, i) => <li key={i} className="flex gap-3"><span className="num flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface/20 text-sm font-bold">{i + 1}</span><span className="text-[16px] leading-6">{a}</span></li>)}</ol>
           </Card>
-          <div className="mt-3 divide-y divide-ink-100 overflow-hidden rounded-3xl bg-white shadow-card">
+          <div className="mt-3 divide-y divide-ink-100 overflow-hidden rounded-3xl bg-surface shadow-card">
             {QUESTIONS.map(([k, q]) => r[k] ? <div key={k} className="px-4 py-3"><div className="text-[13px] font-semibold text-leaf-700">{q}</div><div className="mt-0.5 leading-6 text-ink-700">{String(r[k])}</div></div> : null)}
           </div>
         </>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Button, Field, Input, Note } from '../components/ui'
 
-export default function Auth() {
+export default function Auth({ compact }: { compact?: boolean } = {}) {
   const [mode, setMode] = useState<'in' | 'up'>('in')
   const [email, setEmail] = useState(''), [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
@@ -27,10 +27,12 @@ export default function Auth() {
     } catch (err: any) { setMsg({ tone: 'danger', text: err?.message ?? 'Something went wrong' }) } finally { setBusy(false) }
   }
   return (
-    <div className="mx-auto flex min-h-full max-w-md flex-col justify-center px-6 py-10">
-      <img src="/icons/icon-192.png" alt="" className="mb-6 h-20 w-20 rounded-[22px] shadow-card" />
-      <h1 className="text-[34px] font-bold leading-10 tracking-tight">NutriTrack AI</h1>
-      <p className="mb-8 mt-1 text-ink-500">Your personal nutrition and fat-loss assistant.</p>
+    <div className={compact ? '' : 'mx-auto flex min-h-full max-w-md flex-col justify-center px-6 py-10'}>
+      {!compact && <>
+        <img src="/icons/icon-192.png" alt="" className="mb-6 h-20 w-20 rounded-[22px] shadow-card" />
+        <h1 className="text-[34px] font-bold leading-10 tracking-tight">NutriTrack AI</h1>
+        <p className="mb-8 mt-1 text-ink-500">Your personal nutrition and fat-loss assistant.</p>
+      </>}
       <Button variant="outline" block size="lg" disabled={busy} onClick={google}>Continue with Google</Button>
       <div className="my-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-ink-400">
         <span className="h-px flex-1 bg-ink-200" />or<span className="h-px flex-1 bg-ink-200" />

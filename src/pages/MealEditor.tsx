@@ -113,7 +113,7 @@ export default function MealEditor() {
           </div>
         </Card>
       ) : meal.no_photo ? (
-        <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-ink-700 shadow-card"><Icon name="camera" size={18} />Logged without photo · tap to add one</button>
+        <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-2 rounded-2xl bg-surface px-4 py-3 text-sm font-semibold text-ink-700 shadow-card"><Icon name="camera" size={18} />Logged without photo · tap to add one</button>
       ) : <div className="flex h-40 items-center justify-center rounded-3xl bg-ink-100"><Spinner /></div>}
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => onPhoto(e.target.files?.[0])} />
 
@@ -164,7 +164,7 @@ export default function MealEditor() {
       {wheyOver && <div className="mt-3"><Note>That makes about {fmt(wheyG / 30, 1)} scoops of whey today. Your own limit is {prefs!.whey_max_scoops}.</Note></div>}
 
       <div className="h-20" />
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-100 bg-white/95 backdrop-blur-xl" style={{ paddingBottom: 'calc(var(--safe-b) + 10px)' }}>
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-100 bg-surface/95 backdrop-blur-xl" style={{ paddingBottom: 'calc(var(--safe-b) + 10px)' }}>
         <div className="mx-auto max-w-lg px-4 pt-3">
           <div className="mb-2 flex items-baseline justify-between">
             <span className="num text-2xl font-bold">{fmt(totals.kcal)} <span className="text-sm font-semibold text-ink-500">kcal est.</span></span>

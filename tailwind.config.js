@@ -1,14 +1,24 @@
+/** Every palette resolves through CSS custom properties, so light and dark are one set of
+ *  class names with two sets of values (see the :root / .dark blocks in src/index.css). */
+const scale = (prefix, shades) => Object.fromEntries(shades.map(s => [s, `rgb(var(--${prefix}-${s}) / <alpha-value>)`]))
+
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        leaf: { 50: '#EEF9F2', 100: '#D9F2E3', 200: '#B4E5C8', 300: '#86D3A7', 400: '#57BD85', 500: '#34A56B', 600: '#268556', 700: '#206A46', 800: '#1D5439', 900: '#184530' },
-        ink: { 900: '#111613', 700: '#2E3731', 500: '#667069', 400: '#8C958F', 300: '#B7BEB9', 200: '#DDE2DE', 100: '#EEF1EE', 50: '#F5F7F5' },
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        leaf: scale('leaf', [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
+        ink: scale('ink', [50, 100, 200, 300, 400, 500, 700, 900]),
+        sky: scale('sky', [50, 100, 300, 400, 600, 700, 800]),
+        amber: scale('amber', [50, 100, 200, 300, 400, 800, 900]),
+        red: scale('red', [50, 100, 600, 700, 800]),
+        violet: scale('violet', [100, 400, 800]),
       },
       fontFamily: { sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"SF Pro Display"', '"Helvetica Neue"', 'Inter', 'system-ui', 'sans-serif'] },
-      boxShadow: { card: '0 1px 2px rgba(17,22,19,.04), 0 8px 24px rgba(17,22,19,.05)' },
+      boxShadow: { card: 'var(--shadow-card)' },
     },
   },
   plugins: [],

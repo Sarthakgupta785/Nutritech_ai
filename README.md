@@ -10,12 +10,12 @@ Built end to end from a written specification — see [How this was built](#how-
 <tr>
 <td width="33%"><img src="docs/screenshots/01-sign-in.png" alt="Sign-in screen"></td>
 <td width="33%"><img src="docs/screenshots/02-dashboard.png" alt="Daily dashboard with calorie ring and macro bars"></td>
-<td width="33%"><img src="docs/screenshots/03-ai-coach.png" alt="AI coach chat"></td>
+<td width="33%"><img src="docs/screenshots/04-dark-mode.png" alt="Daily dashboard in dark mode"></td>
 </tr>
 <tr>
 <td align="center"><sub>Sign in</sub></td>
 <td align="center"><sub>Daily dashboard</sub></td>
-<td align="center"><sub>AI coach</sub></td>
+<td align="center"><sub>Dark mode</sub></td>
 </tr>
 </table>
 
@@ -30,12 +30,17 @@ Built end to end from a written specification — see [How this was built](#how-
 - Scan the nutrition panel on packaged food: values are read, normalised to per 100 g, and saved as a reusable food
 - Manual logging from an 86-item reference database (Indian and common household foods) with live USDA lookup
 - Water, daily weight, favourites, meal duplication, and a photo journal of every day
+- A logging streak, and a weekly summary you can share as a single image
 
 **Guidance**
 - Daily push reminders (hydration, meals, nightly review) plus a weekly weigh-in, each snoozable or skippable
 - An AI coach that answers from your actual targets, preferences and food log rather than generic advice
 - A nightly report: ten specific questions answered, plus three concrete actions for tomorrow
 - Weekly analytics — trends, meal consistency, reminder completion, and a 7-day weight average
+
+**Throughout**
+- Light and dark themes, following the system by default
+- Metric or imperial units for weight and water; food is always counted in grams
 
 **Optional**
 - An equipment-free home workout module: 22 illustrated exercises, a routine generator, guided sessions
@@ -160,6 +165,10 @@ unlogged meal as a skipped one. Weight trends are read from a 7-day moving avera
 joints per pose — interpolated at runtime into a looping SVG animation, with direction arrows derived
 by finding the joints that travel furthest between frames. No images, no video, no licensing.
 
+**One palette, two themes.** Every colour resolves through a CSS custom property, so light and dark
+are one set of class names with two sets of values. No component names a light or dark colour, charts
+and the SVG exercise figures read the same variables, and the iOS status bar colour follows along.
+
 **Security.** Row Level Security on all 17 tables; every policy scopes rows to `auth.uid()`. Meal
 photos live in a private bucket partitioned by user id, enforced by a storage policy. The publishable
 key in the client is safe by design — the database, not secrecy, does the access control.
@@ -205,6 +214,7 @@ Supabase → **SQL Editor**, run in order:
 1. [`supabase/migrations/0001_schema.sql`](supabase/migrations/0001_schema.sql) — tables, RLS, private photo bucket
 2. [`supabase/migrations/0002_seed_foods.sql`](supabase/migrations/0002_seed_foods.sql) — reference foods
 3. [`supabase/migrations/0004_weigh_in_reminders.sql`](supabase/migrations/0004_weigh_in_reminders.sql) — weekly weigh-in reminders
+4. [`supabase/migrations/0005_unit_preference.sql`](supabase/migrations/0005_unit_preference.sql) — metric/imperial preference
 
 Then **Database → Extensions**: enable `pg_cron` and `pg_net`.
 
