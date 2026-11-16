@@ -26,6 +26,7 @@ Built end to end from a written specification — see [How this was built](#how-
 **Logging**
 - Photograph a meal; a vision model identifies each food, estimates portions, and flags what it could not judge
 - Every estimate is editable before it counts — quantities, nutrition, cooking method, missing items
+- Each photo is analysed twice; where the two passes disagree the item is flagged, so attention goes where it is needed
 - Asks about hidden cooking oil, dressings and sauces when they would materially change the numbers
 - Scan the nutrition panel on packaged food: values are read, normalised to per 100 g, and saved as a reusable food
 - Manual logging from an 86-item reference database (Indian and common household foods) with live USDA lookup
@@ -151,6 +152,14 @@ A meal reminder is suppressed entirely if that meal is already logged or skipped
 **Confirmed data is the only source of truth.** AI output is a proposal. Nothing reaches a total, a
 report or the coach until the user presses confirm. Each item carries its provenance — reference
 value, typical recipe, AI estimate, or edited by you — and the badge is shown wherever the number is.
+
+**Disagreement as a confidence signal.** Published work on portion estimation tops out around 15–17%
+error using a purpose-built network *with a depth sensor*, so a better single estimate is not where the
+gains are. Instead each photo is analysed twice — once near-deterministic, once sampled — and the two
+results are merged by matching items on reference id, then name, then containment. Where they agree the
+estimate stands; where they diverge by more than 18% the item is flagged with both numbers, and anything
+only one pass saw is surfaced but marked. The user's attention goes to the few items that need it rather
+than to all of them. Merge edge cases are unit-tested.
 
 **The app measures its own accuracy, then feeds it back.** Every photo-analysed meal stores both the
 AI's proposal and the values the user confirmed, which is the only ground truth available. Those pairs

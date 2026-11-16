@@ -6,6 +6,7 @@ import { db, newId, patch, put, remove, SYNC_TABLES, sync } from '../lib/db'
 import { useProfile, usePrefs, useReminders, useSyncState, useTargets } from '../lib/hooks'
 import { ACTIVITY } from '../lib/nutrition'
 import { disablePush, enablePush, isIOS, pushStatus, type PushStatus } from '../lib/push'
+import { useDoubleCheck } from '../lib/settings'
 import { useTheme } from '../lib/theme'
 import { displayToKg, kgToDisplay, unitsOf, weightUnit } from '../lib/units'
 import { supabase } from '../lib/supabase'
@@ -17,6 +18,7 @@ export default function Profile() {
   const profile = useProfile(), targets = useTargets(), prefs = usePrefs(), reminders = useReminders(), sy = useSyncState()
   const { hash } = useLocation()
   const { theme, set: setThemeValue } = useTheme()
+  const [doubleCheck, setDoubleCheck] = useDoubleCheck()
   const [sheet, setSheet] = useState<'profile' | 'targets' | 'prefs' | 'reminder' | null>(null)
   const [editing, setEditing] = useState<Reminder | null>(null)
   useEffect(() => { if (hash) setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth' }), 50) }, [hash])
@@ -73,6 +75,10 @@ export default function Profile() {
       </Card>
 
       <SectionTitle>Optional features</SectionTitle>
+      <Card className="mb-3 flex items-center justify-between">
+        <div className="pr-3"><div className="font-medium">Double-check photo estimates</div><div className="text-sm text-ink-500">Analyses each photo twice and flags the items where the two estimates disagree. Uses one extra AI call per meal.</div></div>
+        <Toggle on={doubleCheck} onChange={setDoubleCheck} label="Double-check photo estimates" />
+      </Card>
       <Card className="flex items-center justify-between">
         <div><div className="font-medium">Home workouts</div><div className="text-sm text-ink-500">Equipment-free routines. Never required.</div></div>
         <Toggle on={prefs.workouts_enabled} onChange={v => patch('user_preferences', prefs.id, { workouts_enabled: v })} label="Home workouts" />

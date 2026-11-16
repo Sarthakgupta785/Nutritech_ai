@@ -6,7 +6,7 @@ const env = (k: string): string | undefined => (globalThis as any).Deno?.env.get
 export interface Tool { name: string; description: string; input_schema: Record<string, unknown> }
 type Block = Record<string, any>
 type Content = string | Block[]
-export interface AiOptions { system: string; messages: { role: 'user' | 'assistant'; content: Content }[]; tool?: Tool; max_tokens?: number }
+export interface AiOptions { system: string; messages: { role: 'user' | 'assistant'; content: Content }[]; tool?: Tool; max_tokens?: number; temperature?: number }
 
 /** JSON Schema → the schema subset Gemini's responseSchema accepts (upper-case types, nullable instead of type arrays). */
 export function toGeminiSchema(s: any): any {
@@ -91,7 +91,7 @@ async function fetchWithRetry(url: string, init: RequestInit, model: string, att
 async function gemini(key: string, o: AiOptions): Promise<any> {
   const model = env('AI_MODEL') || 'gemini-3.8-flash'
   // Gemini counts its internal reasoning toward the output limit, so leave generous headroom.
-  const generationConfig: Record<string, unknown> = { maxOutputTokens: Math.max((o.max_tokens ?? 1500) * 4, 4096), temperature: o.tool ? 0.2 : 0.6 }
+  const generationConfig: Record<string, unknown> = { maxOutputTokens: Math.max((o.max_tokens ?? 1500) * 4, 4096), temperature: o.temperature ?? (o.tool ? 0.2 : 0.6) }
   if (o.tool) { generationConfig.responseMimeType = 'application/json'; generationConfig.responseSchema = toGeminiSchema(o.tool.input_schema) }
   const init: RequestInit = {
     method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
@@ -115,7 +115,7 @@ async function gemini(key: string, o: AiOptions): Promise<any> {
 }
 
 async function anthropic(key: string, o: AiOptions): Promise<any> {
-  const body: Record<string, unknown> = { model: env('AI_MODEL') || 'claude-sonnet-5-5', max_tokens: o.max_tokens ?? 1500, system: o.system, messages: o.messages }
+  const body: Record<string, unknown> = { model: env('AI_MODEL') || 'claude-sonnet-5-5', max_tokens: o.max_tokens ?? 1500, system: o.system, messages: o.messages, temperature: o.temperature ?? 1 }
   if (o.tool) { body.tools = [o.tool]; body.tool_choice = { type: 'tool', name: o.tool.name } }
   const res = await fetchWithRetry('https://api.anthropic.com/v1/messages',
     { method: 'POST', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, body: JSON.stringify(body) },

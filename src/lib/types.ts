@@ -46,7 +46,7 @@ export interface AiItem {
   confidence: number; portion_unclear: boolean; note?: string
 }
 export interface AiQuestion { question: string; kind: 'oil' | 'sauce' | 'other' }
-export interface AiAnalysis { meal_name: string; items: AiItem[]; questions: AiQuestion[]; assumptions: string; overall_confidence: number; analysed_at: string }
+export interface AiAnalysis { meal_name: string; items: AiItem[]; questions: AiQuestion[]; assumptions: string; overall_confidence: number; analysed_at: string; passes?: number }
 export interface LabelAnalysis {
   product_name: string; brand: string | null; unit: Unit; printed_basis: 'per_100' | 'per_serving' | 'both'
   kcal: number; protein_g: number; carbs_g: number; fat_g: number; fibre_g: number; sugar_g: number | null

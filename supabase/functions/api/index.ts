@@ -5,6 +5,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { ai, PRINCIPLES } from '../_shared/ai.ts'
 import { loadContext } from '../_shared/context.ts'
 import { generateDaily, generateWeekly } from '../_shared/reports.ts'
+import { mergePasses } from '../_shared/merge.ts'
 import { cors, json, localDate } from '../_shared/util.ts'
 import { sendPush, vapidFromEnv } from '../_shared/webpush.ts'
 
@@ -50,7 +51,7 @@ async function analyzeMeal(b: any) {
     ? `\n\nThis person's own confirmed portions, from ${cal.reduce((n: number, c: any) => n + (c.samples || 0), 0)} corrected meals. Where you see one of these foods, start from THEIR usual amount and adjust only for what the photo clearly shows to be more or less than usual:\n`
       + cal.map((c: any) => `- ${c.name}: usually ${Math.round(c.your_typical_g)} g (earlier estimates averaged ${Math.round(c.ai_typical_g)} g, over ${c.samples} meals)`).join('\n')
     : ''
-  const out = await ai({
+  const ask = (temperature?: number) => ai({
     system: `You estimate the contents of meal photographs for a food diary. Be careful and honest about uncertainty.
 - List every distinct visible food, drink, sauce, chutney and visible oil/butter separately.
 - Estimate amounts in grams (ml for liquids) of the food as served, using plate, bowl, cutlery and hand size as scale cues. A photo cannot give exact weights: set portion_unclear true and lower confidence when depth, stacking or bowls hide volume.
@@ -63,9 +64,12 @@ async function analyzeMeal(b: any) {
       { type: 'image', source: { type: 'base64', media_type: b.media_type || 'image/jpeg', data: b.image } },
       { type: 'text', text: `Reference food ids:\n${refs}\n\nAnalyse this meal photo.` },
     ] }],
-    tool: ANALYZE_TOOL, max_tokens: 2500,
+    tool: ANALYZE_TOOL, max_tokens: 2500, temperature,
   })
-  return { ...out, analysed_at: new Date().toISOString() }
+  // Two passes by default: the disagreement between them is the useful signal.
+  if (Number(b.passes) === 1) return { ...(await ask()), passes: 1, analysed_at: new Date().toISOString() }
+  const [one, two] = await Promise.all([ask(0.2), ask(0.85)])
+  return { ...mergePasses(one, two), analysed_at: new Date().toISOString() }
 }
 
 

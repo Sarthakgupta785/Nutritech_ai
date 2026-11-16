@@ -9,22 +9,24 @@ import { alive, db, loadPhoto, patch, savePhoto } from '../lib/db'
 import { toLocalInput } from '../lib/dates'
 import { draftFromFood, FOOD_BY_ID, FOODS, matchesAvoid, SOURCE_LABEL } from '../lib/foods'
 import { loadCalibration, useDay, usePhotoUrl, usePrefs } from '../lib/hooks'
+import { useDoubleCheck } from '../lib/settings'
 import { blobToBase64, compressImage } from '../lib/image'
 import { sum, withQuantity } from '../lib/nutrition'
 import type { AiAnalysis, ItemDraft, Slot } from '../lib/types'
 import { Badge, Button, Card, Icon, Input, Note, NumInput, Page, Spinner, cx, fmt, inputCls } from '../components/ui'
 
-type Row = ItemDraft & { _key: string; _base?: number }
+type Row = ItemDraft & { _key: string; _base?: number; _note?: string }
 const METHODS = ['raw', 'boiled', 'steamed', 'grilled', 'roasted', 'baked', 'pan-fried', 'deep-fried', 'curry']
 let seq = 0
-const row = (d: ItemDraft, base?: number): Row => ({ ...d, _key: `k${seq++}`, _base: base })
-const strip = ({ _key, _base, ...d }: Row): ItemDraft => d
+const row = (d: ItemDraft, base?: number, note?: string): Row => ({ ...d, _key: `k${seq++}`, _base: base, _note: note })
+const strip = ({ _key, _base, _note, ...d }: Row): ItemDraft => d
 
 export default function MealEditor() {
   const { id = '' } = useParams()
   const nav = useNavigate()
   const [params] = useSearchParams()
   const prefs = usePrefs()
+  const [doubleCheck] = useDoubleCheck()
   const meal = useLiveQuery(() => db.meals.get(id), [id])
   const saved = useLiveQuery(async () => alive(await db.meal_items.where('meal_id').equals(id).toArray()).sort((a, b) => a.sort - b.sort), [id])
   const hasPhotoRow = useLiveQuery(async () => alive(await db.meal_photos.where('meal_id').equals(id).toArray()).length > 0, [id])
@@ -46,7 +48,7 @@ export default function MealEditor() {
     if (!meal || saved === undefined || rows !== null) return
     setName(meal.name); setSlot(meal.slot); setEatenAt(meal.eaten_at)
     if (saved.length) setRows(saved.map(s => row(itemToDraft(s))))
-    else if (meal.ai_analysis) setRows(draftsFromAnalysis(meal.ai_analysis).map(d => row(d, d.quantity)))
+    else if (meal.ai_analysis) setRows(draftsFromAnalysis(meal.ai_analysis).map((d, i) => row(d, d.quantity, meal.ai_analysis!.items[i]?.note)))
     else setRows([])
   }, [meal, saved, rows])
 
@@ -60,9 +62,10 @@ export default function MealEditor() {
         image: await blobToBase64(blob), media_type: 'image/jpeg', refs: FOODS.map(f => ({ id: f.id, name: f.name })),
         hint: `${SLOT_LABEL[slot]}. The user often eats: ${(prefs?.preferred ?? []).join(', ')}.`,
         portions: await loadCalibration(),   // how much of each food this person actually logs
+        passes: doubleCheck ? 2 : 1,         // two passes: disagreement tells the user what to check
       })
       await patch('meals', id, { ai_analysis: analysis })
-      setRows(draftsFromAnalysis(analysis).map(d => row(d, d.quantity))); setDismissed([])
+      setRows(draftsFromAnalysis(analysis).map((d, i) => row(d, d.quantity, analysis.items[i]?.note))); setDismissed([])
       setName(n => n || analysis.meal_name)
     } catch (e: any) { setErr(e?.message ?? 'Analysis failed') } finally { setAnalysing(false) }
   }
@@ -77,6 +80,7 @@ export default function MealEditor() {
   const addItems = (items: ItemDraft[]) => setRows(rs => [...(rs ?? []), ...items.map(d => row(d))])
   const totals = sum(rows)
   const analysis = meal.ai_analysis
+  const needsCheck = rows.filter(r => r._note || (r.confidence != null && r.confidence < 0.6)).length
   const photoOk = Boolean(hasPhotoRow) || meal.no_photo
   const questions = (analysis?.questions ?? []).map((q, i) => ({ ...q, i })).filter(q => !dismissed.includes(q.i))
   const avoided = rows.map(r => matchesAvoid(r.name, prefs?.avoid ?? [])).filter(Boolean)
@@ -118,7 +122,7 @@ export default function MealEditor() {
       ) : <div className="flex h-40 items-center justify-center rounded-3xl bg-ink-100"><Spinner /></div>}
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => onPhoto(e.target.files?.[0])} />
 
-      {analysing && <Card className="mt-3 flex items-center gap-3"><Spinner /><div><div className="font-semibold">Analysing your meal…</div><div className="text-sm text-ink-500">Identifying foods and estimating portions</div></div></Card>}
+      {analysing && <Card className="mt-3 flex items-center gap-3"><Spinner /><div><div className="font-semibold">Analysing your meal…</div><div className="text-sm text-ink-500">{doubleCheck ? 'Estimating twice, to see where the two agree' : 'Identifying foods and estimating portions'}</div></div></Card>}
       {err && <div className="mt-3"><Note tone="warn">{err}</Note></div>}
 
       {analysis && !analysing && (
@@ -126,6 +130,7 @@ export default function MealEditor() {
           <h2 className="text-xl font-bold">Here's what I identified in your meal.</h2>
           <p className="mt-1 text-[13px] leading-5 text-ink-500">These are estimates from a photo, not measurements. Check each amount and correct anything that looks off. {analysis.assumptions}</p>
           {!analysis.items.length && <div className="mt-2"><Note tone="warn">I could not find food in this photo. Add items by hand below.</Note></div>}
+          {needsCheck > 0 && <div className="mt-2"><Note tone="warn"><b>{needsCheck} of {rows.length} items worth checking.</b> {analysis.passes === 2 ? 'I estimated this photo twice; these are the ones where the two passes disagreed or the portion was unclear.' : 'The portion was unclear for these.'} The rest look consistent.</Note></div>}
         </div>
       )}
 
@@ -187,7 +192,7 @@ function ItemCard({ r, onChange, onDelete }: { r: Row; onChange: (fn: (r: Row) =
   const src = SOURCE_LABEL[r.source]
   const ref = r.food_ref ? FOOD_BY_ID[r.food_ref] : undefined
   const conf = r.confidence
-  const unclear = conf != null && conf < 0.6
+  const unclear = (conf != null && conf < 0.6) || Boolean(r._note)
   const setQty = (q: number) => onChange(x => ({ ...withQuantity(x, q), _key: x._key, _base: x._base }))
   const setMacro = (k: 'kcal' | 'protein_g' | 'carbs_g' | 'fat_g' | 'fibre_g', v: number) => onChange(x => ({ ...x, [k]: v, per100: null, source: 'edited' }))
   return (
@@ -200,7 +205,7 @@ function ItemCard({ r, onChange, onDelete }: { r: Row; onChange: (fn: (r: Row) =
         <Badge className={src.cls}>{src.label}</Badge>
         {conf != null && <Badge className={conf >= 0.8 ? 'bg-leaf-100 text-leaf-800' : conf >= 0.6 ? 'bg-ink-100 text-ink-700' : 'bg-amber-100 text-amber-800'}>{conf >= 0.8 ? 'High' : conf >= 0.6 ? 'Medium' : 'Low'} confidence</Badge>}
       </div>
-      {unclear && <div className="mt-2 text-[13px] font-medium text-amber-800">Portion unclear from the photo. Enter the weight, pick a size, or confirm the estimate.</div>}
+      {(unclear || r._note) && <div className="mt-2 text-[13px] font-medium leading-5 text-amber-800">{r._note || 'Portion unclear from the photo. Enter the weight, pick a size, or confirm the estimate.'}</div>}
 
       <div className="mt-3 flex items-center gap-2">
         <div className="relative w-28 shrink-0">

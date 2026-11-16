@@ -83,7 +83,7 @@ async function fetchWithRetry(url, init, model, attempts = 3) {
 }
 async function gemini(key, o) {
   const model = env("AI_MODEL") || "gemini-3.8-flash";
-  const generationConfig = { maxOutputTokens: Math.max((o.max_tokens ?? 1500) * 4, 4096), temperature: o.tool ? 0.2 : 0.6 };
+  const generationConfig = { maxOutputTokens: Math.max((o.max_tokens ?? 1500) * 4, 4096), temperature: o.temperature ?? (o.tool ? 0.2 : 0.6) };
   if (o.tool) {
     generationConfig.responseMimeType = "application/json";
     generationConfig.responseSchema = toGeminiSchema(o.tool.input_schema);
@@ -109,7 +109,7 @@ async function gemini(key, o) {
   return o.tool ? parseJson(text) : text;
 }
 async function anthropic(key, o) {
-  const body = { model: env("AI_MODEL") || "claude-sonnet-5-5", max_tokens: o.max_tokens ?? 1500, system: o.system, messages: o.messages };
+  const body = { model: env("AI_MODEL") || "claude-sonnet-5-5", max_tokens: o.max_tokens ?? 1500, system: o.system, messages: o.messages, temperature: o.temperature ?? 1 };
   if (o.tool) {
     body.tools = [o.tool];
     body.tool_choice = { type: "tool", name: o.tool.name };
@@ -332,6 +332,68 @@ Write the weekly report for ${start} to ${end}. Only count days that have logged
   return row;
 }
 
+// supabase/functions/_shared/merge.ts
+var DISAGREE = 0.18;
+var norm = (x) => x.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+function mergePasses(a, b) {
+  const used = /* @__PURE__ */ new Set();
+  const other = b.items ?? [];
+  const items = (a.items ?? []).map((it) => {
+    let j = it.ref_id ? other.findIndex((o2, i) => !used.has(i) && o2.ref_id === it.ref_id) : -1;
+    if (j < 0) j = other.findIndex((o2, i) => !used.has(i) && norm(o2.name) === norm(it.name));
+    if (j < 0) j = other.findIndex((o2, i) => {
+      const x = norm(o2.name), y = norm(it.name);
+      return !used.has(i) && x.length > 2 && y.length > 2 && (x.includes(y) || y.includes(x));
+    });
+    if (j < 0) {
+      return {
+        ...it,
+        confidence: Math.min(it.confidence ?? 0.5, 0.45),
+        portion_unclear: true,
+        note: [it.note, "Only one of two passes saw this item, so check whether it belongs here."].filter(Boolean).join(" ")
+      };
+    }
+    used.add(j);
+    const o = other[j];
+    const ga = Number(it.grams) || 0, gb = Number(o.grams) || 0, mean = (ga + gb) / 2;
+    if (!mean) return it;
+    const spread = Math.abs(ga - gb) / mean;
+    const grams = Math.round(mean);
+    const scale = ga > 0 ? grams / ga : 1;
+    const merged = {
+      ...it,
+      grams,
+      kcal: Math.round((it.kcal ?? 0) * scale),
+      protein_g: Math.round((it.protein_g ?? 0) * scale * 10) / 10,
+      carbs_g: Math.round((it.carbs_g ?? 0) * scale * 10) / 10,
+      fat_g: Math.round((it.fat_g ?? 0) * scale * 10) / 10,
+      fibre_g: Math.round((it.fibre_g ?? 0) * scale * 10) / 10,
+      confidence: Math.min(it.confidence ?? 0.6, Math.max(0.15, 1 - spread * 1.6))
+    };
+    if (spread > DISAGREE) {
+      return {
+        ...merged,
+        portion_unclear: true,
+        note: `The two estimates differed \u2014 ${Math.round(ga)} g and ${Math.round(gb)} g. Worth checking this one.`
+      };
+    }
+    return merged;
+  });
+  const extras = other.filter((_, i) => !used.has(i)).map((o) => ({
+    ...o,
+    confidence: Math.min(o.confidence ?? 0.5, 0.45),
+    portion_unclear: true,
+    note: "Only one of two passes saw this item, so check whether it belongs here."
+  }));
+  return {
+    ...a,
+    items: [...items, ...extras],
+    questions: (a.questions ?? []).length ? a.questions : b.questions ?? [],
+    overall_confidence: items.length ? items.reduce((n, x) => n + (x.confidence ?? 0.5), 0) / items.length : a.overall_confidence,
+    passes: 2
+  };
+}
+
 // supabase/functions/_shared/webpush.ts
 var enc = new TextEncoder();
 var bs = (u) => u;
@@ -459,7 +521,7 @@ async function analyzeMeal(b) {
 
 This person's own confirmed portions, from ${cal.reduce((n, c) => n + (c.samples || 0), 0)} corrected meals. Where you see one of these foods, start from THEIR usual amount and adjust only for what the photo clearly shows to be more or less than usual:
 ` + cal.map((c) => `- ${c.name}: usually ${Math.round(c.your_typical_g)} g (earlier estimates averaged ${Math.round(c.ai_typical_g)} g, over ${c.samples} meals)`).join("\n") : "";
-  const out = await ai({
+  const ask = (temperature) => ai({
     system: `You estimate the contents of meal photographs for a food diary. Be careful and honest about uncertainty.
 - List every distinct visible food, drink, sauce, chutney and visible oil/butter separately.
 - Estimate amounts in grams (ml for liquids) of the food as served, using plate, bowl, cutlery and hand size as scale cues. A photo cannot give exact weights: set portion_unclear true and lower confidence when depth, stacking or bowls hide volume.
@@ -476,9 +538,12 @@ ${refs}
 Analyse this meal photo.` }
     ] }],
     tool: ANALYZE_TOOL,
-    max_tokens: 2500
+    max_tokens: 2500,
+    temperature
   });
-  return { ...out, analysed_at: (/* @__PURE__ */ new Date()).toISOString() };
+  if (Number(b.passes) === 1) return { ...await ask(), passes: 1, analysed_at: (/* @__PURE__ */ new Date()).toISOString() };
+  const [one, two] = await Promise.all([ask(0.2), ask(0.85)]);
+  return { ...mergePasses(one, two), analysed_at: (/* @__PURE__ */ new Date()).toISOString() };
 }
 var LABEL_TOOL = {
   name: "nutrition_label",
