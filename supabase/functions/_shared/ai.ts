@@ -44,16 +44,69 @@ export function parseJson(text: string): any {
   throw new Error('AI returned a result that could not be read. Please try again.')
 }
 
+/** Upstream statuses worth retrying: overload and transient gateway faults. */
+const RETRYABLE = new Set([429, 500, 502, 503, 504])
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+export class UpstreamError extends Error {
+  constructor(readonly status: number, readonly body: string, message: string) { super(message); this.name = 'UpstreamError' }
+}
+
+/** Turns a provider failure into something a person can act on. */
+export function friendlyError(status: number, body: string, model: string): string {
+  const lower = body.toLowerCase()
+  if (status === 429) return 'The AI service is rate limited right now. Wait a minute and try again — or check your usage limits in Google AI Studio.'
+  if (RETRYABLE.has(status)) return 'The AI service is busy right now. That is temporary — try again in a few seconds.'
+  if (status === 401 || status === 403) return 'Your AI key was rejected. Check GEMINI_API_KEY in the Supabase function secrets.'
+  if (status === 404 || lower.includes('not found') || lower.includes('is not supported')) {
+    return `The model "${model}" is not available on your key. Set an AI_MODEL secret to a model you can use, for example gemini-3.7-flash.`
+  }
+  if (lower.includes('api key')) return 'Your AI key was not accepted. Check GEMINI_API_KEY in the Supabase function secrets.'
+  if (status === 400) return `The AI rejected the request (400). ${body.slice(0, 160)}`
+  return `AI request failed (${status}). Try again shortly.`
+}
+
+/** Retries overload and gateway errors with backoff before giving up. */
+async function fetchWithRetry(url: string, init: RequestInit, model: string, attempts = 3): Promise<Response> {
+  let status = 0, body = ''
+  for (let i = 0; i < attempts; i++) {
+    let res: Response
+    try {
+      res = await fetch(url, init)
+    } catch (e) {
+      status = 0; body = String(e)
+      if (i === attempts - 1) throw new UpstreamError(0, body, 'Could not reach the AI service. Check the connection and try again.')
+      await sleep(600 * 2 ** i); continue
+    }
+    if (res.ok) return res
+    status = res.status
+    body = await res.text().catch(() => '')
+    if (!RETRYABLE.has(status) || i === attempts - 1) break
+    const after = Number(res.headers.get('retry-after'))
+    await sleep(Number.isFinite(after) && after > 0 ? Math.min(after * 1000, 8000) : 700 * 2 ** i + Math.random() * 400)
+  }
+  throw new UpstreamError(status, body, friendlyError(status, body, model))
+}
+
 async function gemini(key: string, o: AiOptions): Promise<any> {
   const model = env('AI_MODEL') || 'gemini-3.8-flash'
   // Gemini counts its internal reasoning toward the output limit, so leave generous headroom.
   const generationConfig: Record<string, unknown> = { maxOutputTokens: Math.max((o.max_tokens ?? 1500) * 4, 4096), temperature: o.tool ? 0.2 : 0.6 }
   if (o.tool) { generationConfig.responseMimeType = 'application/json'; generationConfig.responseSchema = toGeminiSchema(o.tool.input_schema) }
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  const init: RequestInit = {
     method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
     body: JSON.stringify({ systemInstruction: { parts: [{ text: o.system }] }, contents: toGeminiContents(o.messages), generationConfig }),
-  })
-  if (!res.ok) throw new Error(`AI request failed (${res.status}): ${(await res.text()).slice(0, 300)}`)
+  }
+  const url = (m: string) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`
+  let res: Response
+  try {
+    res = await fetchWithRetry(url(model), init, model)
+  } catch (e) {
+    // One last try on a different model, when the account has one configured and the first is overloaded.
+    const alt = env('AI_MODEL_FALLBACK')
+    if (!alt || alt === model || !(e instanceof UpstreamError) || !RETRYABLE.has(e.status)) throw e
+    res = await fetchWithRetry(url(alt), init, alt, 2)
+  }
   const data = await res.json()
   const cand = data.candidates?.[0]
   const text = (cand?.content?.parts ?? []).filter((p: any) => typeof p.text === 'string' && !p.thought).map((p: any) => p.text).join('').trim()
@@ -64,8 +117,9 @@ async function gemini(key: string, o: AiOptions): Promise<any> {
 async function anthropic(key: string, o: AiOptions): Promise<any> {
   const body: Record<string, unknown> = { model: env('AI_MODEL') || 'claude-sonnet-5-5', max_tokens: o.max_tokens ?? 1500, system: o.system, messages: o.messages }
   if (o.tool) { body.tools = [o.tool]; body.tool_choice = { type: 'tool', name: o.tool.name } }
-  const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`AI request failed (${res.status}): ${(await res.text()).slice(0, 300)}`)
+  const res = await fetchWithRetry('https://api.anthropic.com/v1/messages',
+    { method: 'POST', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, body: JSON.stringify(body) },
+    String(body.model))
   const data = await res.json()
   if (o.tool) {
     const block = data.content?.find((b: any) => b.type === 'tool_use')

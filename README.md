@@ -151,6 +151,11 @@ A meal reminder is suppressed entirely if that meal is already logged or skipped
 report or the coach until the user presses confirm. Each item carries its provenance — reference
 value, typical recipe, AI estimate, or edited by you — and the badge is shown wherever the number is.
 
+**Transport that expects the provider to wobble.** Model endpoints return 429s and 503s under load.
+Every AI call retries overload and gateway errors with exponential backoff and honours `Retry-After`,
+then optionally falls back to a second model, and finally surfaces a sentence a person can act on
+rather than the provider's raw JSON. Covered by tests that stub the transport.
+
 **Structured model output.** Photo analysis, daily reports and workout feedback use typed schemas
 rather than parsed prose. A small converter maps JSON Schema to Gemini's `responseSchema` dialect
 (upper-case types, `nullable` in place of `["string","null"]`), so the same tool definitions work
@@ -230,6 +235,7 @@ Generate a VAPID key pair with `npm run vapid`, then add under **Edge Functions 
 | `CRON_SECRET` | any long random string |
 | `FDC_API_KEY` | optional — USDA online food search |
 | `AI_MODEL` | optional — defaults to `gemini-3.8-flash` |
+| `AI_MODEL_FALLBACK` | optional — a second model to try when the first is overloaded |
 
 To use Claude instead of Gemini, set `ANTHROPIC_API_KEY` and leave `GEMINI_API_KEY` unset.
 

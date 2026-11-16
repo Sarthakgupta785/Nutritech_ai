@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseJson, toGeminiContents, toGeminiSchema } from '../supabase/functions/_shared/ai.ts'
 
 describe('Gemini adapter', () => {
@@ -34,4 +34,43 @@ describe('scheduler helpers', () => {
     expect(weekdayIndex(new Date('2026-11-22T20:00:00Z'), 'Asia/Kolkata')).toBe(0)
     expect(weekdayIndex(new Date('2026-11-22T20:00:00Z'), 'America/New_York')).toBe(6)
   })
+})
+
+describe('AI transport resilience', () => {
+  const realFetch = globalThis.fetch
+  const okBody = { candidates: [{ content: { parts: [{ text: 'hello' }] } }] }
+  function stub(responses: { status: number; body?: any; headers?: Record<string, string> }[]) {
+    let i = 0
+    globalThis.fetch = (async () => {
+      const r = responses[Math.min(i++, responses.length - 1)]
+      return new Response(JSON.stringify(r.body ?? { error: { message: 'busy' } }), { status: r.status, headers: r.headers })
+    }) as typeof fetch
+    return () => i
+  }
+  beforeEach(() => { (globalThis as any).Deno = { env: { get: (k: string) => (k === 'GEMINI_API_KEY' ? 'test-key' : undefined) } } })
+  afterEach(() => { globalThis.fetch = realFetch; delete (globalThis as any).Deno })
+
+  it('retries a 503 overload and succeeds', async () => {
+    const { ai } = await import('../supabase/functions/_shared/ai.ts')
+    const calls = stub([{ status: 503 }, { status: 503 }, { status: 200, body: okBody }])
+    await expect(ai({ system: 's', messages: [{ role: 'user', content: 'hi' }] })).resolves.toBe('hello')
+    expect(calls()).toBe(3)
+  }, 15000)
+
+  it('gives up after repeated overload, with a readable message and no raw JSON', async () => {
+    const { ai } = await import('../supabase/functions/_shared/ai.ts')
+    stub([{ status: 503 }])
+    await expect(ai({ system: 's', messages: [{ role: 'user', content: 'hi' }] }))
+      .rejects.toThrow(/busy right now/i)
+  }, 15000)
+
+  it('does not retry a 400, and explains a bad key or model', async () => {
+    const { ai, friendlyError } = await import('../supabase/functions/_shared/ai.ts')
+    const calls = stub([{ status: 400, body: { error: { message: 'bad request' } } }])
+    await expect(ai({ system: 's', messages: [{ role: 'user', content: 'hi' }] })).rejects.toThrow()
+    expect(calls()).toBe(1)
+    expect(friendlyError(403, '', 'm')).toMatch(/key was rejected/i)
+    expect(friendlyError(404, 'model not found', 'gemini-x')).toMatch(/not available on your key/i)
+    expect(friendlyError(429, '', 'm')).toMatch(/rate limited/i)
+  }, 15000)
 })
