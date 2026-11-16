@@ -8,6 +8,22 @@ equipment-free home workout module.
 **Stack:** React + TypeScript + Tailwind (Vite PWA) · Supabase (Postgres, Auth, Storage, Edge Functions, pg_cron) ·
 Google Gemini vision/LLM (Claude also supported) · Web Push (VAPID) · Recharts.
 
+
+## Screenshots
+
+<table>
+<tr>
+<td width="33%"><img src="docs/screenshots/01-sign-in.png" alt="Sign-in screen"></td>
+<td width="33%"><img src="docs/screenshots/02-dashboard.png" alt="Daily dashboard with calorie ring and macro bars"></td>
+<td width="33%"><img src="docs/screenshots/03-ai-coach.png" alt="AI coach chat"></td>
+</tr>
+<tr>
+<td align="center"><sub>Sign in</sub></td>
+<td align="center"><sub>Daily dashboard</sub></td>
+<td align="center"><sub>AI coach</sub></td>
+</tr>
+</table>
+
 ---
 
 ## Setup (about 30 minutes, once)
@@ -36,6 +52,11 @@ so you can sign in immediately after creating your account. Once your account ex
 "Allow new users to sign up" so nobody else can register.
 
 ### 3. Deploy the backend functions
+
+No command line? Deploy both functions from the Supabase dashboard instead
+(**Edge Functions → Deploy a new function → Via Editor**), pasting the single-file
+builds in [`deploy/`](deploy/). Set the secrets below under **Edge Functions → Secrets**.
+Otherwise, with the CLI:
 
 ```bash
 npx supabase login
