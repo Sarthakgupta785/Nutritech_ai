@@ -1,0 +1,6 @@
+# The scheduler is called by pg_cron, not by a signed-in user; it checks CRON_SECRET itself.
+[functions.tick]
+verify_jwt = false
+
+[functions.api]
+verify_jwt = true
