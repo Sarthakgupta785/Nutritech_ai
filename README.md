@@ -261,6 +261,7 @@ Generate a VAPID key pair with `npm run vapid`, then add under **Edge Functions 
 | `AI_MODEL` | optional — defaults to `gemini-3.8-flash` |
 | `AI_MODEL_FALLBACK` | optional — a second model to try when the first is overloaded |
 | `AI_PROVIDER` | optional — `gemini`, `anthropic` or `openai`; inferred from the keys if unset |
+| `AI_MODEL_OPENAI` | optional — model for the OpenAI-compatible provider, when `AI_MODEL` names a Gemini one |
 | `AI_FALLBACK_PROVIDER` | optional — a different provider to try when the first is overloaded |
 
 ### Using another provider
@@ -271,7 +272,7 @@ on your own machine. Set `AI_PROVIDER=openai` plus:
 | Provider | `OPENAI_BASE_URL` | `OPENAI_API_KEY` | `AI_MODEL` example |
 |---|---|---|---|
 | OpenRouter | `https://openrouter.ai/api/v1` | your key | any vision model id |
-| Groq | `https://api.groq.com/openai/v1` | your key | a vision-capable model |
+| Groq | `https://api.groq.com/openai/v1` | your key | a vision-capable Qwen, e.g. `qwen/qwen3.8-27b` |
 | Mistral | `https://api.mistral.ai/v1` | your key | a Pixtral model |
 | Ollama (self-hosted) | `https://your-tunnel/v1` | not needed | `qwen3-vl:8b` |
 
@@ -281,6 +282,9 @@ strict `json_schema` mode is not portable across these providers.
 **Ollama needs a public address.** The edge functions run in Supabase's cloud, so `localhost` means
 *their* machine, not yours. Expose Ollama through a tunnel (Cloudflare Tunnel, Tailscale Funnel,
 ngrok) and use that hostname. Keep the machine on, or calls fail.
+
+When the primary is Gemini, set `AI_MODEL_OPENAI` as well — otherwise the fallback inherits the
+Gemini model name and fails. Provider model ids change often; check the provider's own docs.
 
 Setting `AI_FALLBACK_PROVIDER` makes the app try the second provider when the first is overloaded —
 useful when a free tier starts returning 503s. It does not fail over for a bad key or a missing
