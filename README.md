@@ -169,6 +169,12 @@ large error behind a median of zero. Foods corrected at least twice are then sen
 — "this person's rice servings have been 203 g, earlier estimates averaged 150 g" — so the model
 anchors on the user rather than on a generic serving. Fully covered by unit tests on synthetic meals.
 
+**Provider-neutral by construction.** One internal call shape serves Gemini, Claude and anything
+OpenAI-compatible, with converters at the edges — JSON Schema to Gemini's dialect, message blocks to
+chat-completions with images as data URLs. Switching providers, including to a model on your own
+hardware, is a secret rather than a code change, and a second provider can be nominated to take over
+when the first is overloaded.
+
 **Transport that expects the provider to wobble.** Model endpoints return 429s and 503s under load.
 Every AI call retries overload and gateway errors with exponential backoff and honours `Retry-After`,
 then optionally falls back to a second model, and finally surfaces a sentence a person can act on
@@ -254,6 +260,31 @@ Generate a VAPID key pair with `npm run vapid`, then add under **Edge Functions 
 | `FDC_API_KEY` | optional — USDA online food search |
 | `AI_MODEL` | optional — defaults to `gemini-3.8-flash` |
 | `AI_MODEL_FALLBACK` | optional — a second model to try when the first is overloaded |
+| `AI_PROVIDER` | optional — `gemini`, `anthropic` or `openai`; inferred from the keys if unset |
+| `AI_FALLBACK_PROVIDER` | optional — a different provider to try when the first is overloaded |
+
+### Using another provider
+
+Anything that speaks the OpenAI chat-completions API works — OpenRouter, Groq, Mistral, or a model
+on your own machine. Set `AI_PROVIDER=openai` plus:
+
+| Provider | `OPENAI_BASE_URL` | `OPENAI_API_KEY` | `AI_MODEL` example |
+|---|---|---|---|
+| OpenRouter | `https://openrouter.ai/api/v1` | your key | any vision model id |
+| Groq | `https://api.groq.com/openai/v1` | your key | a vision-capable model |
+| Mistral | `https://api.mistral.ai/v1` | your key | a Pixtral model |
+| Ollama (self-hosted) | `https://your-tunnel/v1` | not needed | `qwen3-vl:8b` |
+
+Structured output goes through `json_object` mode with the schema stated in the prompt, because
+strict `json_schema` mode is not portable across these providers.
+
+**Ollama needs a public address.** The edge functions run in Supabase's cloud, so `localhost` means
+*their* machine, not yours. Expose Ollama through a tunnel (Cloudflare Tunnel, Tailscale Funnel,
+ngrok) and use that hostname. Keep the machine on, or calls fail.
+
+Setting `AI_FALLBACK_PROVIDER` makes the app try the second provider when the first is overloaded —
+useful when a free tier starts returning 503s. It does not fail over for a bad key or a missing
+model, only for genuine overload.
 
 To use Claude instead of Gemini, set `ANTHROPIC_API_KEY` and leave `GEMINI_API_KEY` unset.
 

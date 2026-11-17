@@ -35,6 +35,20 @@ export function toGeminiContents(messages: AiOptions['messages']) {
   }))
 }
 
+/** Our provider-neutral messages → the OpenAI chat-completions shape, images as data URLs. */
+export function toOpenAiMessages(system: string, messages: AiOptions['messages']) {
+  return [
+    { role: 'system', content: system },
+    ...messages.map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : m.content.map(b =>
+        b.type === 'image'
+          ? { type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } }
+          : { type: 'text', text: String(b.text ?? '') }),
+    })),
+  ]
+}
+
 /** Pulls a JSON object out of model text, tolerating code fences or stray prose around it. */
 export function parseJson(text: string): any {
   const t = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
@@ -129,11 +143,68 @@ async function anthropic(key: string, o: AiOptions): Promise<any> {
   return (data.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim()
 }
 
+/**
+ * Any OpenAI-compatible endpoint: Ollama on your own machine, OpenRouter, Groq, Mistral.
+ * Structured output goes through json_object mode with the schema stated in the prompt, which
+ * every one of them supports — strict json_schema mode is not portable across them.
+ */
+async function openaiCompatible(o: AiOptions): Promise<any> {
+  const base = (env('OPENAI_BASE_URL') || '').replace(/\/$/, '')
+  if (!base) throw new Error('OPENAI_BASE_URL is not set. Point it at your provider, e.g. https://openrouter.ai/api/v1 or http://localhost:11434/v1')
+  const model = env('AI_MODEL_OPENAI') || env('AI_MODEL') || 'qwen3-vl'
+  const key = env('OPENAI_API_KEY') || 'not-needed'   // a local Ollama wants no key
+  const system = o.tool
+    ? `${o.system}\n\nReply with a single JSON object and nothing else — no markdown fence, no commentary. It must match this JSON Schema exactly:\n${JSON.stringify(o.tool.input_schema)}`
+    : o.system
+  const body: Record<string, unknown> = {
+    model, messages: toOpenAiMessages(system, o.messages),
+    max_tokens: o.max_tokens ?? 1500, temperature: o.temperature ?? (o.tool ? 0.2 : 0.6),
+  }
+  if (o.tool) body.response_format = { type: 'json_object' }
+  const res = await fetchWithRetry(`${base}/chat/completions`, {
+    method: 'POST', headers: { Authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  }, model)
+  const data = await res.json()
+  const text = String(data.choices?.[0]?.message?.content ?? '').trim()
+  if (!text) throw new Error(`AI returned no answer (${data.choices?.[0]?.finish_reason || 'empty response'})`)
+  return o.tool ? parseJson(text) : text
+}
+
+export type Provider = 'gemini' | 'anthropic' | 'openai'
+
+/** Explicit AI_PROVIDER wins; otherwise whichever key is present. */
+export function pickProvider(): Provider {
+  const named = (env('AI_PROVIDER') || '').toLowerCase()
+  if (named === 'gemini' || named === 'anthropic' || named === 'openai') return named
+  if (env('GEMINI_API_KEY')) return 'gemini'
+  if (env('ANTHROPIC_API_KEY')) return 'anthropic'
+  if (env('OPENAI_BASE_URL')) return 'openai'
+  throw new Error('No AI provider configured. Set GEMINI_API_KEY, or ANTHROPIC_API_KEY, or OPENAI_BASE_URL (+ OPENAI_API_KEY) in the Supabase function secrets.')
+}
+
+function callProvider(p: Provider, o: AiOptions): Promise<any> {
+  if (p === 'openai') return openaiCompatible(o)
+  if (p === 'anthropic') {
+    const k = env('ANTHROPIC_API_KEY')
+    if (!k) throw new Error('ANTHROPIC_API_KEY is not set')
+    return anthropic(k, o)
+  }
+  const k = env('GEMINI_API_KEY')
+  if (!k) throw new Error('GEMINI_API_KEY is not set')
+  return gemini(k, o)
+}
+
 export async function ai(o: AiOptions): Promise<any> {
-  const g = env('GEMINI_API_KEY'), a = env('ANTHROPIC_API_KEY')
-  if (g) return gemini(g, o)
-  if (a) return anthropic(a, o)
-  throw new Error('No AI key is set. Add GEMINI_API_KEY (or ANTHROPIC_API_KEY) to the Supabase function secrets.')
+  const primary = pickProvider()
+  try {
+    return await callProvider(primary, o)
+  } catch (e) {
+    // A second provider entirely, for when the first is overloaded rather than misconfigured.
+    const fb = (env('AI_FALLBACK_PROVIDER') || '').toLowerCase() as Provider
+    const usable = (fb === 'gemini' || fb === 'anthropic' || fb === 'openai') && fb !== primary
+    if (!usable || !(e instanceof UpstreamError) || !RETRYABLE.has(e.status)) throw e
+    return callProvider(fb, o)
+  }
 }
 
 export const PRINCIPLES = `You are the nutrition assistant inside NutriTrack AI, a personal food-tracking app used by one adult.

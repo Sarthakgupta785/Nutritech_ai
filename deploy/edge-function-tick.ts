@@ -25,6 +25,15 @@ function toGeminiContents(messages) {
     parts: typeof m.content === "string" ? [{ text: m.content }] : m.content.map((b) => b.type === "image" ? { inline_data: { mime_type: b.source.media_type, data: b.source.data } } : { text: String(b.text ?? "") })
   }));
 }
+function toOpenAiMessages(system, messages) {
+  return [
+    { role: "system", content: system },
+    ...messages.map((m) => ({
+      role: m.role,
+      content: typeof m.content === "string" ? m.content : m.content.map((b) => b.type === "image" ? { type: "image_url", image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } } : { type: "text", text: String(b.text ?? "") })
+    }))
+  ];
+}
 function parseJson(text) {
   const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
   try {
@@ -83,7 +92,7 @@ async function fetchWithRetry(url, init, model, attempts = 3) {
 }
 async function gemini(key, o) {
   const model = env("AI_MODEL") || "gemini-3.8-flash";
-  const generationConfig = { maxOutputTokens: Math.max((o.max_tokens ?? 1500) * 4, 4096), temperature: o.tool ? 0.2 : 0.6 };
+  const generationConfig = { maxOutputTokens: Math.max((o.max_tokens ?? 1500) * 4, 4096), temperature: o.temperature ?? (o.tool ? 0.2 : 0.6) };
   if (o.tool) {
     generationConfig.responseMimeType = "application/json";
     generationConfig.responseSchema = toGeminiSchema(o.tool.input_schema);
@@ -109,7 +118,7 @@ async function gemini(key, o) {
   return o.tool ? parseJson(text) : text;
 }
 async function anthropic(key, o) {
-  const body = { model: env("AI_MODEL") || "claude-sonnet-5-5", max_tokens: o.max_tokens ?? 1500, system: o.system, messages: o.messages };
+  const body = { model: env("AI_MODEL") || "claude-sonnet-5-5", max_tokens: o.max_tokens ?? 1500, system: o.system, messages: o.messages, temperature: o.temperature ?? 1 };
   if (o.tool) {
     body.tools = [o.tool];
     body.tool_choice = { type: "tool", name: o.tool.name };
@@ -127,11 +136,61 @@ async function anthropic(key, o) {
   }
   return (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 }
+async function openaiCompatible(o) {
+  const base = (env("OPENAI_BASE_URL") || "").replace(/\/$/, "");
+  if (!base) throw new Error("OPENAI_BASE_URL is not set. Point it at your provider, e.g. https://openrouter.ai/api/v1 or http://localhost:11434/v1");
+  const model = env("AI_MODEL_OPENAI") || env("AI_MODEL") || "qwen3-vl";
+  const key = env("OPENAI_API_KEY") || "not-needed";
+  const system = o.tool ? `${o.system}
+
+Reply with a single JSON object and nothing else \u2014 no markdown fence, no commentary. It must match this JSON Schema exactly:
+${JSON.stringify(o.tool.input_schema)}` : o.system;
+  const body = {
+    model,
+    messages: toOpenAiMessages(system, o.messages),
+    max_tokens: o.max_tokens ?? 1500,
+    temperature: o.temperature ?? (o.tool ? 0.2 : 0.6)
+  };
+  if (o.tool) body.response_format = { type: "json_object" };
+  const res = await fetchWithRetry(`${base}/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify(body)
+  }, model);
+  const data = await res.json();
+  const text = String(data.choices?.[0]?.message?.content ?? "").trim();
+  if (!text) throw new Error(`AI returned no answer (${data.choices?.[0]?.finish_reason || "empty response"})`);
+  return o.tool ? parseJson(text) : text;
+}
+function pickProvider() {
+  const named = (env("AI_PROVIDER") || "").toLowerCase();
+  if (named === "gemini" || named === "anthropic" || named === "openai") return named;
+  if (env("GEMINI_API_KEY")) return "gemini";
+  if (env("ANTHROPIC_API_KEY")) return "anthropic";
+  if (env("OPENAI_BASE_URL")) return "openai";
+  throw new Error("No AI provider configured. Set GEMINI_API_KEY, or ANTHROPIC_API_KEY, or OPENAI_BASE_URL (+ OPENAI_API_KEY) in the Supabase function secrets.");
+}
+function callProvider(p, o) {
+  if (p === "openai") return openaiCompatible(o);
+  if (p === "anthropic") {
+    const k2 = env("ANTHROPIC_API_KEY");
+    if (!k2) throw new Error("ANTHROPIC_API_KEY is not set");
+    return anthropic(k2, o);
+  }
+  const k = env("GEMINI_API_KEY");
+  if (!k) throw new Error("GEMINI_API_KEY is not set");
+  return gemini(k, o);
+}
 async function ai(o) {
-  const g = env("GEMINI_API_KEY"), a = env("ANTHROPIC_API_KEY");
-  if (g) return gemini(g, o);
-  if (a) return anthropic(a, o);
-  throw new Error("No AI key is set. Add GEMINI_API_KEY (or ANTHROPIC_API_KEY) to the Supabase function secrets.");
+  const primary = pickProvider();
+  try {
+    return await callProvider(primary, o);
+  } catch (e) {
+    const fb = (env("AI_FALLBACK_PROVIDER") || "").toLowerCase();
+    const usable = (fb === "gemini" || fb === "anthropic" || fb === "openai") && fb !== primary;
+    if (!usable || !(e instanceof UpstreamError) || !RETRYABLE.has(e.status)) throw e;
+    return callProvider(fb, o);
+  }
 }
 var PRINCIPLES = `You are the nutrition assistant inside NutriTrack AI, a personal food-tracking app used by one adult.
 Ground rules, always:
